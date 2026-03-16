@@ -1,0 +1,17 @@
+# Local environment files (Contains passwords/tokens)
+.env
+.env.example
+
+# Active configuration files (Contains local IPs/origins)
+openclaw-docker/openclaw.json
+
+# Docker / volume data caches (if any)
+openclaw-docker/workspaces/
+
+# Backup files
+*.bak
+*.bak.*
+
+# System / logs
+*.log
+.DS_Store

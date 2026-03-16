@@ -1,0 +1,23 @@
+# GPU override — use this when NVIDIA Container Toolkit is installed on Fedora:
+#
+#   sudo dnf install -y nvidia-container-toolkit
+#   sudo nvidia-ctk runtime configure --runtime=docker
+#   sudo systemctl restart docker
+#
+# Then start with GPU:
+#   make up-gpu
+#
+# Or manually:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+
+services:
+  ollama-brain:
+    environment:
+      - OLLAMA_NUM_PARALLEL=1  # reduced to 1 to save VRAM
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

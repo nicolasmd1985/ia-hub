@@ -1,0 +1,101 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  AI Development Hub  ·  OpenClaw Gateway  +  Ollama Inference Engine
+#  100% local · zero cloud dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  ai-brain-net:
+    driver: bridge
+    name: ai-brain-net
+
+volumes:
+  ollama-models:    # persists downloaded models across restarts
+  openclaw-state:   # persists OpenClaw sessions and memory
+
+services:
+
+  # ───────────────────────────────────────────────────
+  #  OLLAMA  ·  Local LLM inference engine
+  #  GPU passthrough enabled via NVIDIA Container Toolkit
+  # ───────────────────────────────────────────────────
+  ollama-brain:
+    image: ollama/ollama:latest
+    container_name: ollama-brain
+    restart: unless-stopped
+    networks:
+      - ai-brain-net
+    ports:
+      - "11434:11434"         # expose so you can use `ollama` CLI from host too
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://0.0.0.0:11434  # bind on all interfaces
+      - OLLAMA_KEEP_ALIVE=24h             # keep model loaded — avoids 5s reload penalty per request
+      - OLLAMA_MAX_LOADED_MODELS=1        # only 1 model in RAM at a time
+      - OLLAMA_NUM_PARALLEL=1             # 1 parallel request at a time
+      - OLLAMA_CONTEXT_LENGTH=16384       # force context window — prevents truncating OpenClaw's system prompt
+      - CUDA_VISIBLE_DEVICES=             # disable MX110 GPU — too small (2GB) for any model
+      - OLLAMA_INTEL_GPU=0                # no intel GPU offloading either
+      - OLLAMA_NUM_THREADS=8              # use all 8 CPU threads (i5-8250U has 8 logical cores)
+      - OLLAMA_FLASH_ATTENTION=1          # enable flash attention — reduces memory ops during prefill
+    # Port check via bash /dev/tcp — no curl/wget needed in Ollama image
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/11434' 2>/dev/null && exit 0 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ───────────────────────────────────────────────────
+  #  OPENCLAW GATEWAY  ·  Agent orchestration layer
+  #  Built from official npm package at runtime
+  # ───────────────────────────────────────────────────
+  openclaw-gateway:
+    build:
+      context: ./openclaw-docker
+      dockerfile: Dockerfile
+    container_name: openclaw-gateway
+    restart: unless-stopped
+    depends_on:
+      ollama-brain:
+        condition: service_started   # Ollama starts in <1s; no need to wait for health
+    networks:
+      - ai-brain-net
+    ports:
+      - "18789:18789"         # Control UI / Gateway API
+    volumes:
+      - openclaw-state:/root/.openclaw/state
+      # Mount the folder instead of the file to prevent EBUSY rename locks
+      - ./openclaw-docker:/root/.openclaw-config:rw
+      # Agent workspace system prompts (SYSTEM.md for each agent role)
+      - ./openclaw-docker/workspaces:/root/.openclaw/workspaces:rw,z
+      # MOUNT THE CODEBASE HERE:
+      - ${PROJECT_PATH}:/root/project:rw
+    environment:
+      # Tell OpenClaw exactly where its config is
+      - OPENCLAW_CONFIG_PATH=/root/.openclaw-config/openclaw.json
+      - OPENCLAW_HOME=/root/.openclaw
+      - OPENCLAW_STATE_DIR=/root/.openclaw/state
+      # Ollama reachable via Docker internal DNS
+      - OLLAMA_BASE_URL=http://ollama-brain:11434
+      # Gateway auth token
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-my-local-hub-2026}
+      # Load shell env into OpenClaw
+      - OPENCLAW_LOAD_SHELL_ENV=1
+      # Force Node to bind to all interfaces
+      - OPENCLAW_GATEWAY_HOST=0.0.0.0
+      - HOST=0.0.0.0
+      # Node memory — keep reasonable, leave headroom for Ollama models
+      - NODE_OPTIONS=--max-old-space-size=2048
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_USER=${GITHUB_USER}
+      - GITHUB_REPO=${GITHUB_REPO}
+      - PROJECT_NUMBER=${PROJECT_NUMBER}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:18789/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
