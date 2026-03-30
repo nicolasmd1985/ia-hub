@@ -397,6 +397,8 @@ def poll_and_process(env):
 
             if not assigned_agent:
                 # 1. Trigger Architect for Planning (Timeout increased for CPU)
+                print("Clearing stale session locks for [architect]...")
+                safe_clear_locks("architect")
                 prompt_architect = f"Task Title: {item['title']}\nDescription: {item['body']}\n\nYou must analyze the task to decide the required developer role.\nReply STRICTLY with exactly ONE WORD: 'BACKEND', 'FRONTEND', or 'ERROR'.\nIf the task is unclear, missing details, or cannot be routed, reply 'ERROR'."
                 
                 res = trigger_agent("architect", prompt_architect, timeout=3600)
@@ -587,6 +589,8 @@ def poll_and_process(env):
             move_task_column(item['id'], item['title'], "In Review QA", env)
 
             # 4. Trigger QA turn
+            print("Clearing stale session locks for [qa]...")
+            safe_clear_locks("qa")
             # Build a list of actual files the backend agent changed so QA can review them specifically
             changed_files = []
             for line in git_status.stdout.strip().split("\n"):

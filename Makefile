@@ -3,7 +3,7 @@
 #  Usage: make <target>
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: help check up down logs pull model models pull-models test status mission clean-logs shell-ollama shell-openclaw clean
+.PHONY: help check up down logs pull model models pull-models test status mission clean-logs purge purge-state shell-ollama shell-openclaw clean
 
 # Default model to pull
 MODEL ?= llama3.2:latest
@@ -79,6 +79,12 @@ clean-logs: ## Truncate mission and gateway logs to avoid context bloat
 	@truncate -s 0 mission_logs.out 2>/dev/null || : > mission_logs.out
 	@truncate -s 0 gateway.log 2>/dev/null || : > gateway.log
 	@echo "✓ Logs truncated."
+
+purge: purge-state ## Alias for purge-state
+purge-state: ## Forcefully remove all OpenClaw session locks and jsonl state from container
+	@echo "🧹 Purging OpenClaw state from container..."
+	@docker exec openclaw-gateway sh -c "find /root/.openclaw/state -name '*.lock' -delete 2>/dev/null; find /root/.openclaw/state -name '*.jsonl' -delete 2>/dev/null" || true
+	@echo "✨ State purged."
 
 mission: clean-logs ## Start the Mission Control orchestrator
 	@echo "🚀 Starting IA-HUB Mission Control..."
