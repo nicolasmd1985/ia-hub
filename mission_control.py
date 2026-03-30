@@ -249,14 +249,12 @@ def safe_clear_locks(agent_id=None):
     """Clear OpenClaw session locks safely with a strict timeout."""
     try:
         if agent_id:
-            # Clear only the specific agent's session files (faster, targeted)
             cmd = ["docker", "exec", "openclaw-gateway",
                    "sh", "-c",
                    f"find /root/.openclaw/state/agents/{agent_id}/sessions -name '*.lock' -delete 2>/dev/null; "
                    f"find /root/.openclaw/state/agents/{agent_id}/sessions -name '*.jsonl' -delete 2>/dev/null; "
                    f"echo done"]
         else:
-            # Clear all locks on startup
             cmd = ["docker", "exec", "openclaw-gateway",
                    "sh", "-c",
                    "find /root/.openclaw/state -name '*.lock' -delete 2>/dev/null; "
@@ -273,41 +271,110 @@ def safe_clear_locks(agent_id=None):
     except Exception as e:
         print(f"⚠️  Lock clear error: {e}")
 
-def trigger_agent(agent_id, message, timeout=3600):
+def restart_gateway_and_cleanup():
+    """Forcibly restart the gateway to kill zombie processes and clear stale state."""
+    print("🚨 DEADLOCK DETECTED: Forcibly restarting openclaw-gateway...")
+    send_telegram("🚨 Mission Control: Deadlock detected. Restarting OpenClaw Gateway...")
+    
+    subprocess.run(["docker", "restart", "openclaw-gateway"], capture_output=True)
+    
+    # Wait for health recovery (up to 2 minutes)
+    print("⏳ Waiting for gateway to reach healthy state...")
+    for i in range(60):
+        res = subprocess.run(["docker", "inspect", "-f", "{{.State.Health.Status}}", "openclaw-gateway"], capture_output=True, text=True)
+        if "healthy" in res.stdout:
+            print(f"✅ Gateway is healthy after {i*2}s.")
+            break
+        time.sleep(2)
+    
+    time.sleep(5) # Extra buffer
+    safe_clear_locks()
+    print("♻️  Environment recovered.")
+
+def get_latest_io_timestamp(agent_id):
+    """Retrieve the most recent file modification timestamp in the agent's state directory."""
+    cmd = ["docker", "exec", "openclaw-gateway", "sh", "-c", 
+           f"find /root/.openclaw/state/agents/{agent_id} -type f -exec stat -c %Y {{}} + 2>/dev/null | sort -n | tail -1"]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        output = res.stdout.strip()
+        return float(output) if output else 0
+    except:
+        return 0
+
+def trigger_agent(agent_id, message, timeout=7200):
+    """Run an agent with an I/O heartbeat monitor to detect true deadlocks."""
     cmd = [
         "docker", "exec", "openclaw-gateway", 
         "openclaw", "agent", "--agent", agent_id, "--message", message, "--json"
     ]
-    print(f"Triggering [{agent_id.upper()}] (Timeout: {timeout}s)...")
+    print(f"Triggering [{agent_id.upper()}] with I/O Heartbeat (Max Timeout: {timeout}s)...")
+    
+    # Initial I/O state
+    last_io_time = time.time()
+    last_io_timestamp = get_latest_io_timestamp(agent_id)
+    
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    
+    start_time = time.time()
+    io_deadlock_threshold = 900 # 15 minutes of silence = deadlock
+    
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        if result.returncode == 0:
-            try:
-                # Docker might interleave logs with JSON, so read safely
-                output = result.stdout
-                print(f"RAW AGENT OUTPUT: {output}")
-                start_idx = output.find('{')
-                if start_idx != -1:
-                    parsed = json.loads(output[start_idx:])
-                    # Extract text from layout: res["result"]["payloads"][0]["text"]
-                    text = ""
+        while True:
+            # Check if process is still running
+            retcode = process.poll()
+            if retcode is not None:
+                stdout, stderr = process.communicate()
+                if retcode == 0:
                     try:
-                        text = parsed.get("result", {}).get("payloads", [{}])[0].get("text", "")
-                    except:
-                        pass
-                    return {"response": text, "raw": parsed}
-                return {"response": "", "raw": {}}
-            except json.JSONDecodeError:
-                print(f"Error parsing JSON from {agent_id}: {output}")
+                        print(f"RAW AGENT OUTPUT: {stdout}")
+                        start_idx = stdout.find('{')
+                        if start_idx != -1:
+                            parsed = json.loads(stdout[start_idx:])
+                            text = ""
+                            try:
+                                text = parsed.get("result", {}).get("payloads", [{}])[0].get("text", "")
+                            except: pass
+                            return {"response": text, "raw": parsed}
+                        return {"response": "", "raw": {}}
+                    except json.JSONDecodeError:
+                        print(f"Error parsing JSON from {agent_id}: {stdout}")
+                        return None
+                else:
+                    print(f"Error triggering {agent_id} (Code {retcode}): {stderr}")
+                    return None
+
+            # Heartbeat check
+            current_time = time.time()
+            if current_time - start_time > timeout:
+                print(f"🛑 STRIKE 1: Absolute timeout of {timeout}s reached.")
+                process.terminate()
                 return None
-        else:
-            print(f"Error triggering {agent_id}: {result.stderr}")
-            return None
-    except subprocess.TimeoutExpired:
-        print(f"TIMEOUT: {agent_id} took longer than {timeout}s.")
-        return None
+            
+            # Check for I/O activity every 60 seconds
+            time.sleep(60)
+            
+            current_io_timestamp = get_latest_io_timestamp(agent_id)
+            if current_io_timestamp > last_io_timestamp:
+                # Progress detected! Update markers
+                last_io_timestamp = current_io_timestamp
+                last_io_time = current_time
+                elapsed = int(current_time - start_time)
+                print(f"💓 [{agent_id.upper()}] Heartbeat: Active progress detected ({elapsed}s elapsed)")
+            else:
+                quiet_duration = int(current_time - last_io_time)
+                if quiet_duration >= io_deadlock_threshold:
+                    print(f"💀 DEADLOCK: Agent {agent_id} has been silent for {quiet_duration}s.")
+                    process.kill()
+                    restart_gateway_and_cleanup()
+                    return None
+                else:
+                    print(f"⏳ [{agent_id.upper()}] Silent for {quiet_duration}s... (Threshold: {io_deadlock_threshold}s)")
+
     except Exception as e:
         print(f"Exception triggering agent: {e}")
+        if process.poll() is None:
+            process.kill()
         return None
 
 def handle_failure(item, env, reason):
