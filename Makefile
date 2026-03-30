@@ -3,7 +3,7 @@
 #  Usage: make <target>
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: help check up down logs pull model models pull-models test status shell-ollama shell-openclaw clean
+.PHONY: help check up down logs pull model models pull-models test status mission clean-logs shell-ollama shell-openclaw clean
 
 # Default model to pull
 MODEL ?= llama3.2:latest
@@ -74,6 +74,15 @@ status: ## Show container status and GPU usage
 	@echo ""
 	@echo "=== Ollama Models ==="
 	docker exec ollama-brain ollama list 2>/dev/null || echo "Ollama not ready yet"
+
+clean-logs: ## Truncate mission and gateway logs to avoid context bloat
+	@truncate -s 0 mission_logs.out 2>/dev/null || : > mission_logs.out
+	@truncate -s 0 gateway.log 2>/dev/null || : > gateway.log
+	@echo "✓ Logs truncated."
+
+mission: clean-logs ## Start the Mission Control orchestrator
+	@echo "🚀 Starting IA-HUB Mission Control..."
+	@python3 mission_control.py | tee -a mission_logs.out
 
 shell-ollama: ## Open shell inside Ollama container
 	docker exec -it ollama-brain bash
