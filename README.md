@@ -86,3 +86,40 @@ Then run `make check` again to verify.
 - **openclaw-gateway**: OpenClaw agent gateway, built from Node 22 + npm package
 - **ai-brain-net**: Internal Docker bridge — OpenClaw reaches Ollama at `http://ollama-brain:11434`
 - Both containers restart automatically unless explicitly stopped
+
+## Automated Kanban Workflow (Mission Control)
+
+The AI Hub features a fully autonomous background daemon (`mission_control.py`) that syncs with your GitHub Project board to drive tasks automatically.
+
+### Running Mission Control in the Background
+
+Since the python script has an internal continuous loop (polling every 15s), you can use the `run_mission_control.sh` wrapper combined with `nohup` to run it indefinitely as a background service:
+
+```bash
+nohup ./run_mission_control.sh > mission_logs.out 2>&1 &
+```
+
+**What this does:**
+1. **Detaches** the process from your terminal, allowing it to survive server disconnects or window closures.
+2. Uses the bash wrapper (`run_mission_control.sh`) as a safety **watchdog** that automatically restarts the python script if it ever fatally crashes.
+3. Redirects all logs (standard outputs + errors) to the `mission_logs.out` file.
+
+### Managing the Background Process
+
+**1. Watch the live logs:**
+```bash
+tail -f mission_logs.out
+```
+*(Press `Ctrl+C` to stop watching. The script will safely continue running in the background).*
+
+**2. Check if the loop is actively running:**
+```bash
+ps aux | grep mission_control
+```
+*(Note: If the only result you see is `grep --color=auto mission_control`, it means the background daemon is OFF. That line is just the terminal capturing your search command executing at that exact millisecond).*
+
+**3. Stop the background process entirely:**
+```bash
+pkill -f mission_control.py && pkill -f run_mission_control.sh
+```
+*(You must kill both to stop the system completely. The python process runs the logic, while the bash script runs the watchdog wrapping it. Killing only one might trigger the other to auto-restart).*

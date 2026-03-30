@@ -8,9 +8,13 @@ openclaw-docker/openclaw.json
 # Docker / volume data caches (if any)
 openclaw-docker/workspaces/
 
-# Backup files
+# Backup and temporary files
 *.bak
 *.bak.*
+*.clobbered.*
+*_output.txt
+test_fetch_output.txt
+test_fetch_output_fixed.txt
 
 # System / logs
 *.log

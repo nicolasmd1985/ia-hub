@@ -13,6 +13,9 @@ TEMPLATE_FILE="$SCRIPT_DIR/openclaw-docker/openclaw.json.template"
 OUTPUT_FILE="$SCRIPT_DIR/openclaw-docker/openclaw.json"
 
 # Load .env
+# Auto-fix permission lock on openclaw.json to prevent generation crash
+docker run --rm -v "$SCRIPT_DIR/openclaw-docker:/data" alpine chown -R 1000:1000 /data >/dev/null 2>&1 || true
+
 if [ -f "$ENV_FILE" ]; then
     export $(grep -v '^#' "$ENV_FILE" | xargs)
 fi

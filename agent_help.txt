@@ -1,0 +1,47 @@
+
+🦞 OpenClaw 2026.3.13 (61d171a) — Hot reload for config, cold sweat for deploys.
+
+Usage: openclaw agent [options]
+
+Run an agent turn via the Gateway (use --local for embedded)
+
+Options:
+  --agent <id>               Agent id (overrides routing bindings)
+  --channel <channel>        Delivery channel:
+                             last|telegram|whatsapp|discord|irc|googlechat|slack|signal|imessage|line|feishu|nostr|msteams|mattermost|nextcloud-talk|matrix|bluebubbles|zalo|zalouser|synology-chat|tlon
+                             (omit to use the main session channel)
+  --deliver                  Send the agent's reply back to the selected channel
+                             (default: false)
+  -h, --help                 Display help for command
+  --json                     Output result as JSON (default: false)
+  --local                    Run the embedded agent locally (requires model
+                             provider API keys in your shell) (default: false)
+  -m, --message <text>       Message body for the agent
+  --reply-account <id>       Delivery account id override
+  --reply-channel <channel>  Delivery channel override (separate from routing)
+  --reply-to <target>        Delivery target override (separate from session
+                             routing)
+  --session-id <id>          Use an explicit session id
+  -t, --to <number>          Recipient number in E.164 used to derive the
+                             session key
+  --thinking <level>         Thinking level: off | minimal | low | medium | high
+                             | xhigh
+  --timeout <seconds>        Override agent command timeout (seconds, default
+                             600 or config value)
+  --verbose <on|off>         Persist agent verbose level for the session
+
+Examples:
+  openclaw agent --to +15555550123 --message "status update"
+    Start a new session.
+  openclaw agent --agent ops --message "Summarize logs"
+    Use a specific agent.
+  openclaw agent --session-id 1234 --message "Summarize inbox" --thinking medium
+    Target a session with explicit thinking level.
+  openclaw agent --to +15555550123 --message "Trace logs" --verbose on --json
+    Enable verbose logging and JSON output.
+  openclaw agent --to +15555550123 --message "Summon reply" --deliver
+    Deliver reply.
+  openclaw agent --agent ops --message "Generate report" --deliver --reply-channel slack --reply-to "#reports"
+    Send reply to a different channel/target.
+
+Docs: https://docs.openclaw.ai/cli/agent

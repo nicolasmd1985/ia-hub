@@ -1,0 +1,25 @@
+
+🦞 OpenClaw 2026.3.13 (61d171a) — I don't judge, but your missing API keys are absolutely judging you.
+
+Usage: openclaw cron [options] [command]
+
+Manage cron jobs (via Gateway)
+
+Options:
+  -h, --help  Display help for command
+
+Commands:
+  add         Add a cron job
+  disable     Disable a cron job
+  edit        Edit a cron job (patch fields)
+  enable      Enable a cron job
+  help        Display help for command
+  list        List cron jobs
+  rm          Remove a cron job
+  run         Run a cron job now (debug)
+  runs        Show cron run history (JSONL-backed)
+  status      Show cron scheduler status
+
+Docs: https://docs.openclaw.ai/cli/cron
+Upgrade tip: run `openclaw doctor --fix` to normalize legacy cron job storage.
+

@@ -1,0 +1,235 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.3.7",
+    "lastTouchedAt": "2026-03-16T02:33:21.712Z"
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "ollama": {
+        "baseUrl": "http://ollama-brain:11434/v1",
+        "apiKey": "ollama",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "qwen2.5:0.5b",
+            "name": "Qwen2.5 0.5B — ultrafast",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 16384,
+            "maxTokens": 2048
+          },
+          {
+            "id": "qwen2.5:1.5b",
+            "name": "Qwen2.5 1.5B — fast",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 16384,
+            "maxTokens": 2048
+          },
+          {
+            "id": "qwen2.5:3b",
+            "name": "Qwen2.5 3B — slow fallback",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 16384,
+            "maxTokens": 2048
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "ollama/qwen2.5:1.5b",
+        "fallbacks": [
+          "ollama/qwen2.5:0.5b"
+        ]
+      },
+      "models": {
+        "ollama/qwen2.5:1.5b": {
+          "alias": "Qwen 1.5B — fast code (local)"
+        },
+        "ollama/qwen2.5:0.5b": {
+          "alias": "Qwen 0.5B — ultrafast (local)"
+        },
+        "ollama/qwen2.5:3b": {
+          "alias": "Qwen 3B — slow fallback (local)"
+        }
+      }
+    },
+    "list": [
+      {
+        "id": "backend",
+        "name": "Backend Developer",
+        "workspace": "/root/.openclaw/workspaces/backend",
+        "model": {
+          "primary": "ollama/qwen2.5:1.5b",
+          "fallbacks": [
+            "ollama/qwen2.5:3b"
+          ]
+        },
+        "identity": {
+          "name": "Backend",
+          "theme": "Ruby on Rails backend specialist. Be concise.",
+          "emoji": "⚙️"
+        },
+        "tools": {
+          "profile": "coding"
+        }
+      },
+      {
+        "id": "frontend",
+        "name": "Frontend Developer",
+        "workspace": "/root/.openclaw/workspaces/frontend",
+        "model": {
+          "primary": "ollama/qwen2.5:1.5b",
+          "fallbacks": [
+            "ollama/qwen2.5:0.5b"
+          ]
+        },
+        "identity": {
+          "name": "Frontend",
+          "theme": "React/Vue frontend specialist. Be concise.",
+          "emoji": "🎨"
+        },
+        "tools": {
+          "profile": "coding"
+        }
+      },
+      {
+        "id": "qa",
+        "name": "QA Engineer",
+        "workspace": "/root/.openclaw/workspaces/qa",
+        "model": {
+          "primary": "ollama/qwen2.5:1.5b",
+          "fallbacks": [
+            "ollama/qwen2.5:0.5b"
+          ]
+        },
+        "identity": {
+          "name": "QA",
+          "theme": "QA and testing specialist. Be concise.",
+          "emoji": "🧪"
+        },
+        "tools": {
+          "profile": "coding"
+        }
+      },
+      {
+        "id": "architect",
+        "name": "Architect",
+        "workspace": "/root/.openclaw/workspaces/architect",
+        "model": {
+          "primary": "ollama/qwen2.5:1.5b",
+          "fallbacks": [
+            "ollama/qwen2.5:0.5b"
+          ]
+        },
+        "identity": {
+          "name": "Architect",
+          "theme": "Software architect. Be concise.",
+          "emoji": "🏗️"
+        },
+        "tools": {
+          "profile": "minimal"
+        }
+      },
+      {
+        "id": "devops",
+        "name": "DevOps Engineer",
+        "workspace": "/root/.openclaw/workspaces/devops",
+        "model": {
+          "primary": "ollama/qwen2.5:1.5b",
+          "fallbacks": [
+            "ollama/qwen2.5:0.5b"
+          ]
+        },
+        "identity": {
+          "name": "DevOps",
+          "theme": "DevOps and infrastructure specialist. Be concise.",
+          "emoji": "🚀"
+        },
+        "tools": {
+          "profile": "coding"
+        }
+      },
+      {
+        "id": "designer",
+        "name": "UI/UX Designer",
+        "workspace": "/root/.openclaw/workspaces/designer",
+        "model": {
+          "primary": "ollama/qwen2.5:1.5b",
+          "fallbacks": [
+            "ollama/qwen2.5:0.5b"
+          ]
+        },
+        "identity": {
+          "name": "Designer",
+          "theme": "UI/UX designer. Be concise.",
+          "emoji": "✏️"
+        },
+        "tools": {
+          "profile": "coding"
+        }
+      }
+    ]
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "cron": {
+    "enabled": true,
+    "maxConcurrentRuns": 1,
+    "sessionRetention": "48h"
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "streaming": "partial"
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "lan",
+    "controlUi": {
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "http://100.101.253.100:18789"
+      ],
+      "allowInsecureAuth": true,
+      "dangerouslyDisableDeviceAuth": true
+    }
+  }
+}

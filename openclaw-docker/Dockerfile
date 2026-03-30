@@ -1,10 +1,11 @@
 FROM node:22-slim
 
-# Install curl for healthchecks + dependencies
+# Install curl for healthchecks + dependencies + docker CLI
 RUN apt-get update && apt-get install -y \
     curl \
     bash \
     git \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 # Install OpenClaw globally from npm (official package)

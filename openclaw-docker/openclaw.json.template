@@ -7,29 +7,31 @@
       "allowedOrigins": [
         "http://localhost:18789",
         "http://100.101.253.100:18789"
-      ]
+      ],
+      "dangerouslyDisableDeviceAuth": true,
+      "allowInsecureAuth": true
     }
   },
   "agents": {
     "defaults": {
       "model": {
-        "primary": "ollama/qwen2.5-coder:7b",
+        "primary": "ollama/qwen2.5:1.5b",
         "fallbacks": [
-          "ollama/qwen2.5:7b"
+          "ollama/qwen2.5:0.5b"
         ]
       },
       "models": {
-        "ollama/qwen2.5-coder:7b": {
-          "alias": "Qwen Coder 7B (local)"
-        },
-        "ollama/qwen2.5:7b": {
-          "alias": "Qwen 7B (local)"
+        "ollama/qwen2.5:1.5b": {
+          "alias": "Qwen 1.5B (local)"
         },
         "ollama/qwen2.5:3b": {
           "alias": "Qwen 3B (local)"
         },
-        "ollama/deepseek-r1:7b": {
-          "alias": "DeepSeek R1 7B (local)"
+        "ollama/qwen2.5:0.5b": {
+          "alias": "Qwen 0.5B (local)"
+        },
+        "ollama/phi4-mini": {
+          "alias": "Phi-4 Mini 3.8B (best tool-caller)"
         }
       }
     },
@@ -40,8 +42,10 @@
         "name": "Architect",
         "workspace": "/root/.openclaw/workspaces/architect",
         "model": {
-          "primary": "ollama/qwen2.5:3b",
-          "fallbacks": []
+          "primary": "ollama/qwen2.5:1.5b",
+          "fallbacks": [
+            "ollama/qwen2.5:0.5b"
+          ]
         },
         "identity": {
           "name": "Architect",
@@ -57,9 +61,10 @@
         "name": "Backend Developer",
         "workspace": "/root/.openclaw/workspaces/backend",
         "model": {
-          "primary": "ollama/qwen2.5-coder:7b",
+          "primary": "ollama/qwen2.5:7b",
           "fallbacks": [
-            "ollama/qwen2.5:7b"
+            "ollama/qwen2.5:3b",
+            "ollama/qwen2.5:1.5b"
           ]
         },
         "identity": {
@@ -76,9 +81,9 @@
         "name": "Frontend Developer",
         "workspace": "/root/.openclaw/workspaces/frontend",
         "model": {
-          "primary": "ollama/qwen2.5-coder:7b",
+          "primary": "ollama/qwen2.5:1.5b",
           "fallbacks": [
-            "ollama/qwen2.5:7b"
+            "ollama/qwen2.5:0.5b"
           ]
         },
         "identity": {
@@ -95,8 +100,10 @@
         "name": "Analyst",
         "workspace": "/root/.openclaw/workspaces/analyst",
         "model": {
-          "primary": "ollama/qwen2.5:3b",
-          "fallbacks": []
+          "primary": "ollama/qwen2.5:1.5b",
+          "fallbacks": [
+            "ollama/qwen2.5:0.5b"
+          ]
         },
         "identity": {
           "name": "Analyst",
@@ -106,13 +113,41 @@
         "tools": {
           "profile": "minimal"
         }
+      },
+      {
+        "id": "qa",
+        "name": "QA Engineer",
+        "workspace": "/root/.openclaw/workspaces/qa",
+        "model": {
+          "primary": "ollama/qwen2.5:7b",
+          "fallbacks": [
+            "ollama/qwen2.5:3b",
+            "ollama/qwen2.5:1.5b"
+          ]
+        },
+        "identity": {
+          "name": "QA",
+          "emoji": "🧪",
+          "theme": "Quality assurance and testing specialist"
+        },
+        "tools": {
+          "profile": "coding"
+        }
       }
     ]
   },
   "cron": {
     "enabled": true,
     "maxConcurrentRuns": 1,
-    "sessionRetention": "48h"
+    "sessionRetention": "1h"
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "streaming": "partial"
+    }
   },
   "models": {
     "mode": "merge",
@@ -123,8 +158,8 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen2.5-coder:7b",
-            "name": "Qwen2.5 Coder 7B",
+            "id": "qwen2.5:0.5b",
+            "name": "Qwen2.5 0.5B — ultrafast",
             "reasoning": false,
             "input": [
               "text"
@@ -135,28 +170,12 @@
               "cacheRead": 0,
               "cacheWrite": 0
             },
-            "contextWindow": 32768,
-            "maxTokens": 8192
-          },
-          {
-            "id": "qwen2.5:7b",
-            "name": "Qwen2.5 7B",
-            "reasoning": false,
-            "input": [
-              "text"
-            ],
-            "cost": {
-              "input": 0,
-              "output": 0,
-              "cacheRead": 0,
-              "cacheWrite": 0
-            },
-            "contextWindow": 32768,
-            "maxTokens": 8192
+            "contextWindow": 16384,
+            "maxTokens": 2048
           },
           {
             "id": "qwen2.5:3b",
-            "name": "Qwen2.5 3B",
+            "name": "Qwen2.5 3B — balanced",
             "reasoning": false,
             "input": [
               "text"
@@ -171,9 +190,9 @@
             "maxTokens": 4096
           },
           {
-            "id": "deepseek-r1:7b",
-            "name": "DeepSeek R1 7B",
-            "reasoning": true,
+            "id": "qwen2.5:1.5b",
+            "name": "Qwen2.5 1.5B — fast",
+            "reasoning": false,
             "input": [
               "text"
             ],
@@ -183,8 +202,24 @@
               "cacheRead": 0,
               "cacheWrite": 0
             },
-            "contextWindow": 32768,
-            "maxTokens": 8192
+            "contextWindow": 16384,
+            "maxTokens": 2048
+          },
+          {
+            "id": "phi4-mini",
+            "name": "Phi-4 Mini 3.8B — best tool-caller",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 16384,
+            "maxTokens": 4096
           }
         ]
       }
