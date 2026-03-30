@@ -61,7 +61,7 @@
         "name": "Backend Developer",
         "workspace": "/root/.openclaw/workspaces/backend",
         "model": {
-          "primary": "ollama/qwen2.5:7b",
+          "primary": "ollama/qwen2.5:3b",
           "fallbacks": [
             "ollama/qwen2.5:3b",
             "ollama/qwen2.5:1.5b"
@@ -119,7 +119,7 @@
         "name": "QA Engineer",
         "workspace": "/root/.openclaw/workspaces/qa",
         "model": {
-          "primary": "ollama/qwen2.5:7b",
+          "primary": "ollama/qwen2.5:3b",
           "fallbacks": [
             "ollama/qwen2.5:3b",
             "ollama/qwen2.5:1.5b"
