@@ -302,7 +302,7 @@ def get_latest_io_timestamp(agent_id):
     except:
         return 0
 
-def trigger_agent(agent_id, message, timeout=7200):
+def trigger_agent(agent_id, message, timeout=86400):
     """Run an agent with an I/O heartbeat monitor to detect true deadlocks."""
     cmd = [
         "docker", "exec", "openclaw-gateway", 
@@ -317,7 +317,7 @@ def trigger_agent(agent_id, message, timeout=7200):
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     
     start_time = time.time()
-    io_deadlock_threshold = 900 # 15 minutes of silence = deadlock
+    io_deadlock_threshold = 10800 # 3 hours of silence = deadlock
     
     try:
         while True:

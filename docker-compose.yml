@@ -72,7 +72,7 @@ services:
       # MOUNT THE CODEBASE HERE:
       - ${PROJECT_PATH}:/root/project:rw
       # Allow the QA Agent to execute tests via the host's Docker engine
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock:rw
     # Memory fencing to prevent OOM on host OS
     deploy:
       resources:

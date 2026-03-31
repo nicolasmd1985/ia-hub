@@ -1,0 +1,4 @@
+diag_docker_output.out: line 1: ---: command not found
+diag_docker_output.out: line 2: CONTAINER: command not found
+diag_docker_output.out: line 3: syntax error near unexpected token `('
+diag_docker_output.out: line 3: `f87aae940c5e   ai-hub-openclaw-gateway      "docker-entrypoint.s…"   8 minutes ago   Restarting (1) 27 seconds ago                                                     openclaw-gateway'
