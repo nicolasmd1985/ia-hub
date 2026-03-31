@@ -28,7 +28,7 @@ def query_graphql(query, variables, token):
         "-H", "Content-Type: application/json"
     ]
     data = json.dumps({"query": query, "variables": variables})
-    cmd = ["curl", "-4", "--connect-timeout", "10", "--max-time", "60", "-s", "-X", "POST"] + headers + ["-d", data, url]
+    cmd = ["curl", "--connect-timeout", "10", "--max-time", "60", "-s", "-X", "POST"] + headers + ["-d", data, url]
     
     try:
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -53,7 +53,7 @@ def send_telegram(message):
         "-H", "Content-Type: application/json"
     ]
     data = json.dumps({"chat_id": chat_id, "text": message})
-    cmd = ["curl", "-4", "--connect-timeout", "10", "--max-time", "30", "-s", "-X", "POST"] + headers + ["-d", data, url]
+    cmd = ["curl", "--connect-timeout", "10", "--max-time", "30", "-s", "-X", "POST"] + headers + ["-d", data, url]
     try:
         subprocess.run(cmd, capture_output=True)
     except Exception as e:
@@ -120,7 +120,7 @@ def create_pull_request(issue_number, env, branch_name):
         "base": "production",
         "body": f"This PR contains autonomous agent implementations for issue #{issue_number}."
     })
-    cmd = ["curl", "-4", "--connect-timeout", "10", "--max-time", "60", "-s", "-X", "POST"] + headers + ["-d", data, url]
+    cmd = ["curl", "--connect-timeout", "10", "--max-time", "60", "-s", "-X", "POST"] + headers + ["-d", data, url]
     try:
         subprocess.run(cmd, capture_output=True)
         print(f"Pull request created on branch {branch_name}!")
@@ -138,7 +138,7 @@ def close_issue(issue_number, env):
         "-H", "Content-Type: application/json"
     ]
     data = json.dumps({"state": "closed"})
-    cmd = ["curl", "-4", "--connect-timeout", "10", "--max-time", "60", "-s", "-X", "PATCH"] + headers + ["-d", data, url]
+    cmd = ["curl", "--connect-timeout", "10", "--max-time", "60", "-s", "-X", "PATCH"] + headers + ["-d", data, url]
     print(f"Closing GitHub Issue #{issue_number}...")
     try:
         subprocess.run(cmd, capture_output=True)
@@ -156,7 +156,7 @@ def comment_on_issue(issue_number, comment_body, env):
         "-H", "Content-Type: application/json"
     ]
     data = json.dumps({"body": comment_body})
-    cmd = ["curl", "-4", "--connect-timeout", "10", "--max-time", "10", "-s", "-X", "POST"] + headers + ["-d", data, url]
+    cmd = ["curl", "--connect-timeout", "10", "--max-time", "10", "-s", "-X", "POST"] + headers + ["-d", data, url]
     try:
         subprocess.run(cmd, capture_output=True)
     except Exception as e:

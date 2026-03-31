@@ -41,7 +41,7 @@ services:
     # Port check via bash /dev/tcp — no curl/wget needed in Ollama image
     # Check if the Ollama API is actually responding (not just the port being open)
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -58,8 +58,7 @@ services:
     container_name: openclaw-gateway
     restart: unless-stopped
     depends_on:
-      ollama-brain:
-        condition: service_healthy   # Wait for model engine to be fully ready
+      - ollama-brain
     networks:
       - ai-brain-net
     ports:
@@ -78,9 +77,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
         reservations:
-          memory: 256M
+          memory: 512M
     environment:
       # Tell OpenClaw exactly where its config is
       - OPENCLAW_CONFIG_PATH=/root/.openclaw-config/openclaw.json
@@ -96,7 +95,7 @@ services:
       - OPENCLAW_GATEWAY_HOST=0.0.0.0
       - HOST=0.0.0.0
       # Node memory — keep reasonable, leave headroom for Ollama models
-      - NODE_OPTIONS=--max-old-space-size=2048
+      - NODE_OPTIONS=--max-old-space-size=768
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - GITHUB_USER=${GITHUB_USER}
       - GITHUB_REPO=${GITHUB_REPO}
@@ -104,7 +103,7 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:18789/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:18789/health || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 5

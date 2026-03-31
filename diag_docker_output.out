@@ -1,0 +1,36 @@
+--- DOCKER STATUS ---
+CONTAINER ID   IMAGE                        COMMAND                  CREATED         STATUS                          PORTS                                             NAMES
+f87aae940c5e   ai-hub-openclaw-gateway      "docker-entrypoint.s…"   8 minutes ago   Restarting (1) 27 seconds ago                                                     openclaw-gateway
+3d072db25fad   ollama/ollama:latest         "/bin/ollama serve"      8 minutes ago   Up 8 minutes (healthy)          0.0.0.0:11434->11434/tcp, [::]:11434->11434/tcp   ollama-brain
+287015dc0532   1d22cc4f64b8                 "bundle exec puma -C…"   8 days ago      Up 8 days                       0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp       ordenapp_web_container
+09b62aca108f   redis:6.2                    "docker-entrypoint.s…"   8 days ago      Up 8 days                       6379/tcp                                          ordenapp_web-redis-1
+daf6b85e4d75   lectio-web                   "entrypoint.sh bash …"   4 months ago    Exited (1) 4 months ago                                                           lectio-web-1
+77db60adedcc   mysql:5.7                    "docker-entrypoint.s…"   4 months ago    Exited (0) 4 months ago                                                           lectio-db-1
+7748baed908f   nicolasmd/portfolio:latest   "bundle exec puma -C…"   4 months ago    Up 10 days                      127.0.0.1:3002->3000/tcp                          portfolio-web-1
+ca63b7e3b054   postgres:15                  "docker-entrypoint.s…"   4 months ago    Up 10 days (healthy)            0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp       portfolio-postgres-1
+503be95daa15   redis:7                      "docker-entrypoint.s…"   4 months ago    Up 10 days (healthy)            6379/tcp                                          portfolio-redis-1
+4f3959cc8c8c   hello-world                  "/hello"                 4 months ago    Exited (0) 4 months ago                                                           musing_euler
+NAME               IMAGE                     COMMAND                  SERVICE            CREATED         STATUS                          PORTS
+ollama-brain       ollama/ollama:latest      "/bin/ollama serve"      ollama-brain       8 minutes ago   Up 8 minutes (healthy)          0.0.0.0:11434->11434/tcp, [::]:11434->11434/tcp
+openclaw-gateway   ai-hub-openclaw-gateway   "docker-entrypoint.s…"   openclaw-gateway   8 minutes ago   Restarting (1) 28 seconds ago   
+--- LOGS LAST 20 ---
+
+Run: openclaw doctor --fix
+Config invalid
+File: /root/.openclaw-config/openclaw.json
+Problem:
+  - models.providers.ollama: Unrecognized key: "timeout"
+
+Run: openclaw doctor --fix
+Config invalid
+File: /root/.openclaw-config/openclaw.json
+Problem:
+  - models.providers.ollama: Unrecognized key: "timeout"
+
+Run: openclaw doctor --fix
+Config invalid
+File: /root/.openclaw-config/openclaw.json
+Problem:
+  - models.providers.ollama: Unrecognized key: "timeout"
+
+Run: openclaw doctor --fix

@@ -1,0 +1,97 @@
+nohup: ignoring input
+=====================================================
+ 🛸 Mission Control Autonomous Loop Activated
+ Polling GitHub Project board every 300 seconds...
+=====================================================
+[Tue Mar 31 06:11:38 PM EDT 2026] 🛰️ Checking board...
+==============================================
+🚀 Mission Control active.
+🔁 Entering continuous Kanban polling loop...
+==============================================
+🔓 Locks/sessions cleared for [all]
+
+=> Found 1 task(s) in 'To Do'.
+
+🚀 Processing Task: [BACKEND] Write RSpec Test Suite for Subsidiary
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Progress'...
+Checking out clean working branch 'agent-19'...
+Auto-routing to BACKEND based on title tag.
+Claiming task with BACKEND agent...
+Syncing code files into container workspace /root/.openclaw/workspaces/backend...
+Clearing stale session locks for [backend]...
+🔓 Locks/sessions cleared for [backend]
+Triggering [BACKEND] with I/O Heartbeat (Max Timeout: 3600s)...
+⏳ [BACKEND] Silent for 0s... (Threshold: 900s)
+Error triggering backend (Code 137): 
+❌ FALLBACK TRIGGERED: BACKEND DEV FAILURE: Agent timed out or failed to execute.
+Reverting Git workspace due to failure...
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'Backlog'...
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+
+=> Found 1 task(s) in 'To Do'.
+
+🚀 Processing Task: [BACKEND] Write RSpec Test Suite for Subsidiary
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Progress'...
+Checking out clean working branch 'agent-19'...
+Auto-routing to BACKEND based on title tag.
+Claiming task with BACKEND agent...
+Syncing code files into container workspace /root/.openclaw/workspaces/backend...
+Clearing stale session locks for [backend]...
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+Triggering [BACKEND] with I/O Heartbeat (Max Timeout: 3600s)...
+⏳ [BACKEND] Silent for 0s... (Threshold: 900s)
+Error triggering backend (Code 1): Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+❌ FALLBACK TRIGGERED: BACKEND DEV FAILURE: Agent timed out or failed to execute.
+Reverting Git workspace due to failure...
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'Backlog'...
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container f87aae940c5e3c2ed405fc19fc8343d6fed1574367ca62a7d4fc5db08be7f5bf is restarting, wait until the container is running
+
+./run_mission_control.sh: line 24: 2813039 Killed                     python3 -u "$DIR/mission_control.py"
+[Tue Mar 31 06:20:16 PM EDT 2026] 💤 Sleeping for 300 seconds...

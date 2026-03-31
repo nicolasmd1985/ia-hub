@@ -1,0 +1,73 @@
+--- SYSTEM STATUS ---
+Tue Mar 31 06:11:00 PM EDT 2026
+ 18:11:00 up 12 days,  1:16,  5 users,  load average: 0.35, 0.24, 0.15
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda3       475G  190G  284G  41% /
+               total        used        free      shared  buff/cache   available
+Mem:           15881        7553         243         134        8557        8328
+Swap:           8191        1399        6792
+root         969  0.0  0.2 375024 48552 ?        Ssl  Mar19   8:28 /usr/bin/python3 -sP /usr/bin/firewalld --nofork --nopid
+root        1204  0.0  0.1 499544 24264 ?        Ssl  Mar19   1:37 /usr/bin/python3 -Es /usr/sbin/tuned -l -P
+root        1249  0.0  0.1 498056 26660 ?        Ssl  Mar19   0:46 /usr/bin/python3 -Es /usr/sbin/tuned-ppd -l
+nicolas+  120181  0.0  0.0 233680  4832 pts/0    Ss+  Mar19   0:00 /usr/bin/bash
+nicolas+  120644  0.0  0.1 618252 27136 ?        Sl   Mar19   0:00 /usr/bin/python3 /usr/share/ibus-typing-booster/engine/main.py --ibus
+root     1924518  0.0  0.6 2314700 103468 ?      Ssl  Mar30   0:26 /bin/ollama serve
+root     1928827 71.0 23.5 6553064 3831528 ?     Sl   Mar30 952:33 /usr/bin/ollama runner --model /root/.ollama/models/blobs/sha256-5ee4f07cdb9beadbbb293e85803c569b01bd37ed059d2715faa7bb405f31caa6 --port 41069
+root     2057879  0.0  0.3 1089748 50240 ?       Ssl  Mar30   0:00 openclaw
+root     2057963  0.1  1.7 22583412 284400 ?     Sl   Mar30   1:55 openclaw-gateway
+nicolas+ 2383451  0.0  0.0 232028  3728 ?        S    07:14   0:00 /bin/bash ./run_mission_control.sh
+nicolas+ 2383455  0.0  0.1 257512 22692 ?        S    07:14   0:03 python3 -u /home/nicolasmd/Development/agents-developmet/ai-hub/mission_control.py
+nicolas+ 2796580  0.0  0.0 232156  3944 ?        Ss   17:53   0:00 bash -s
+nicolas+ 2799495  0.0  0.0 232156  4008 ?        Ss   17:56   0:00 bash -s
+nicolas+ 2799672  0.0  0.0 233584  5992 pts/1    Ss+  17:56   0:00 /usr/bin/bash --init-file /home/nicolasmd/.antigravity-server/bin/1.21.6-497c5f20052b4227f87cf8e71e2a9328ca9a6b66/out/vs/workbench/contrib/terminal/common/scripts/shellIntegration-bash.sh
+nicolas+ 2799710  0.0  0.0 233584  6024 pts/2    Ss   17:56   0:00 /usr/bin/bash --init-file /home/nicolasmd/.antigravity-server/bin/1.21.6-497c5f20052b4227f87cf8e71e2a9328ca9a6b66/out/vs/workbench/contrib/terminal/common/scripts/shellIntegration-bash.sh
+nicolas+ 2811900  0.0  0.0 232028  3812 pts/2    S+   18:11   0:00 bash diag.sh
+-rw-r--r--. 1 nicolasmd nicolasmd 95474 Mar 31 18:10 mission_logs.out
+-rw-r--r--. 1 nicolasmd nicolasmd  1404 Mar 31 07:13 mission_logs_v6.out
+-rw-r--r--. 1 nicolasmd nicolasmd  1384 Mar 31 07:10 mission_logs_v5.out
+-rw-r--r--. 1 nicolasmd nicolasmd   667 Mar 31 07:07 mission_logs_v4.out
+-rw-r--r--. 1 nicolasmd nicolasmd  2017 Mar 31 06:49 mission_logs_v2.out
+-rw-r--r--. 1 nicolasmd nicolasmd  1676 Mar 31 06:49 mission_logs_v3.out
+--- HUB DIR ---
+.
+..
+agent_help.txt
+check-env.sh
+curl_zen.txt
+current_board.txt
+debug_card.json
+diag_output.out
+diag.sh
+docker-compose.gpu.yml
+docker-compose.yml
+.env
+.env.example
+gateway.log
+generate-config.sh
+getme.json
+.git
+.gitignore
+GUIDE.md
+Makefile
+mission_control.py
+mission_final_output.txt
+mission_logs.out
+mission_logs_v2.out
+mission_logs_v3.out
+mission_logs_v4.out
+mission_logs_v5.out
+mission_logs_v6.out
+move_back_to_todo.py
+openclaw_cron_help.txt
+openclaw-docker
+openclaw_help.txt
+out.json
+pull-models.sh
+__pycache__
+README.md
+run_mission_control.sh
+tel_test.json
+test_columns_output.txt
+test_columns.py
+test_fetch.py
+test-hub.sh
