@@ -1,0 +1,5 @@
+commit da3b4c267f83569243505af77ad55e40de3eee8f
+Author: Nicolas Agent <nicolasmelectronic@gmail.com>
+Date:   Tue Mar 31 19:14:01 2026 -0400
+
+    [INFRA] Enable Endurance Mode: 7B models, 32GB Swap, and extreme timeouts

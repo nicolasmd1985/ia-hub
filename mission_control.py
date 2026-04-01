@@ -306,7 +306,7 @@ def trigger_agent(agent_id, message, timeout=86400):
     """Run an agent with an I/O heartbeat monitor to detect true deadlocks."""
     cmd = [
         "docker", "exec", "openclaw-gateway", 
-        "openclaw", "agent", "--agent", agent_id, "--message", message, "--json"
+        "openclaw", "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", "86400"
     ]
     print(f"Triggering [{agent_id.upper()}] with I/O Heartbeat (Max Timeout: {timeout}s)...")
     

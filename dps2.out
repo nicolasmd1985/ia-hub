@@ -1,0 +1,3 @@
+NAME               IMAGE                     COMMAND                  SERVICE            CREATED             STATUS                    PORTS
+ollama-brain       ollama/ollama:latest      "/bin/ollama serve"      ollama-brain       About an hour ago   Up 18 minutes (healthy)   0.0.0.0:11434->11434/tcp, [::]:11434->11434/tcp
+openclaw-gateway   ai-hub-openclaw-gateway   "docker-entrypoint.s…"   openclaw-gateway   19 minutes ago      Up 10 seconds (healthy)   0.0.0.0:18789->18789/tcp, [::]:18789->18789/tcp

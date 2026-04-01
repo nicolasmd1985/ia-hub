@@ -1,0 +1,51 @@
+							sessionKey: params.sessionKey ?? params.sessionId,
+							provider: activeErrorContext.provider,
+							model: activeErrorContext.model
+						}) : void 0) || lastAssistant?.errorMessage?.trim() || (timedOut ? "LLM request timed out." : rateLimitFailure ? "LLM request rate limited." : billingFailure ? formatBillingErrorMessage(activeErrorContext.provider, activeErrorContext.model) : authFailure ? "LLM request unauthorized." : "LLM request failed.");
+						const status = resolveFailoverStatus(assistantFailoverReason ?? "unknown") ?? (isTimeoutErrorMessage(message) ? 408 : void 0);
+						logAssistantFailoverDecision("fallback_model", { status });
+						throw new FailoverError(message, {
+							reason: assistantFailoverReason ?? "unknown",
+							provider: activeErrorContext.provider,
+							model: activeErrorContext.model,
+							profileId: lastProfileId,
+							status
+						});
+					}
+					logAssistantFailoverDecision("surface_error");
+				}
+				const usageMeta = buildUsageAgentMetaFields({
+					usageAccumulator,
+					lastAssistantUsage: lastAssistant?.usage,
+					lastRunPromptUsage,
+					lastTurnTotal
+				});
+				const agentMeta = {
+					sessionId: sessionIdUsed,
+					provider: lastAssistant?.provider ?? provider,
+					model: lastAssistant?.model ?? model.id,
+					usage: usageMeta.usage,
+					lastCallUsage: usageMeta.lastCallUsage,
+					promptTokens: usageMeta.promptTokens,
+					compactionCount: autoCompactionCount > 0 ? autoCompactionCount : void 0
+				};
+				const payloads = buildEmbeddedRunPayloads({
+					assistantTexts: attempt.assistantTexts,
+					toolMetas: attempt.toolMetas,
+					lastAssistant: attempt.lastAssistant,
+					lastToolError: attempt.lastToolError,
+					config: params.config,
+					sessionKey: params.sessionKey ?? params.sessionId,
+					provider: activeErrorContext.provider,
+					model: activeErrorContext.model,
+					verboseLevel: params.verboseLevel,
+					reasoningLevel: params.reasoningLevel,
+					toolResultFormat: resolvedToolResultFormat,
+					suppressToolErrorWarnings: params.suppressToolErrorWarnings,
+					inlineToolResultsAllowed: false,
+					didSendViaMessagingTool: attempt.didSendViaMessagingTool,
+					didSendDeterministicApprovalPrompt: attempt.didSendDeterministicApprovalPrompt
+				});
+				if (timedOut && !timedOutDuringCompaction && payloads.length === 0) return {
+					payloads: [{
+						text: "Request timed out before a response was generated. Please try again, or increase `agents.defaults.timeoutSeconds` in your config.",
