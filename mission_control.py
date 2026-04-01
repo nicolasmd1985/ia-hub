@@ -335,8 +335,32 @@ def trigger_agent(agent_id, message, timeout=86400):
                             try:
                                 text = parsed.get("result", {}).get("payloads", [{}])[0].get("text", "")
                             except: pass
-                            return {"response": text, "raw": parsed}
-                        return {"response": "", "raw": {}}
+                            
+                            # ── Abort/Timeout Detection ──────────────────────
+                            # OpenClaw returns status "ok" even on internal
+                            # timeouts, but sets "aborted": true in result.meta.
+                            # Also detect the hardcoded timeout error string.
+                            aborted = False
+                            try:
+                                aborted = parsed.get("result", {}).get("meta", {}).get("aborted", False)
+                            except: pass
+                            
+                            TIMEOUT_SIGNATURES = [
+                                "request timed out",
+                                "increase `agents.defaults.timeoutseconds`",
+                                "timed out before a response",
+                            ]
+                            text_lower = (text or "").lower()
+                            is_timeout = aborted or any(sig in text_lower for sig in TIMEOUT_SIGNATURES)
+                            
+                            if is_timeout:
+                                duration_ms = parsed.get("result", {}).get("meta", {}).get("durationMs", "?")
+                                print(f"🛑 AGENT TIMEOUT DETECTED for [{agent_id}]: aborted={aborted}, durationMs={duration_ms}")
+                                print(f"   Response text: {text[:200]}")
+                                return {"response": text, "raw": parsed, "aborted": True}
+                            
+                            return {"response": text, "raw": parsed, "aborted": False}
+                        return {"response": "", "raw": {}, "aborted": False}
                     except json.JSONDecodeError:
                         print(f"Error parsing JSON from {agent_id}: {stdout}")
                         return None
@@ -540,17 +564,35 @@ def poll_and_process(env):
 
             work_res = trigger_agent(assigned_agent, work_prompt, timeout=3600)
             if not work_res:
-                handle_retry(item, env, f"{assigned_agent.upper()} DEV FAILURE: Agent timed out or failed to execute.", cur_branch)
+                handle_retry(item, env, f"{assigned_agent.upper()} DEV FAILURE: Agent returned None (process error).", cur_branch)
+                continue
+            
+            # ── Strict Abort/Timeout Interception ────────────────────────
+            # If OpenClaw internally timed out (60s default or any other),
+            # do NOT proceed to QA. Intercept immediately and retry.
+            if work_res.get("aborted"):
+                duration_ms = work_res.get("raw", {}).get("result", {}).get("meta", {}).get("durationMs", "?")
+                reason = (
+                    f"{assigned_agent.upper()} DEV TIMEOUT: OpenClaw agent was aborted internally "
+                    f"(durationMs={duration_ms}). This is usually caused by the gateway's "
+                    f"agents.defaults.timeoutSeconds being too low or config being rejected. "
+                    f"The agent did NOT produce valid output. Retrying."
+                )
+                handle_retry(item, env, reason, cur_branch)
                 continue
             
             work_response_text = work_res.get("response", "").strip()
             print(f"Dev Agent Response: {work_response_text}")
             
-            # 1.5b models struggle with instruction chaining; any populated reply over 100 chars is treated as a valid report payload!
-            is_valid_report = len(work_response_text.strip()) > 50
+            # Secondary validation: check response content for timeout signatures
+            # even if aborted flag was somehow missed
+            TIMEOUT_STRINGS = ["request timed out", "timed out before a response", "increase `agents.defaults"]
+            response_lower = work_response_text.lower()
+            is_timeout_text = any(sig in response_lower for sig in TIMEOUT_STRINGS)
+            
+            is_valid_report = len(work_response_text.strip()) > 50 and not is_timeout_text
             if len(work_response_text.strip()) <= 50 and "ERROR:" in work_response_text.upper():
                  is_valid_report = False
-                 
             if not is_valid_report:
                 print(f"❌ DEV REJECTION: {work_response_text}")
                 send_telegram(f"♻️ Task '{item['title']}' failed DEV execution. Moving back to 'To Do' for a retry.\nReason: {work_response_text}")
@@ -702,7 +744,15 @@ def poll_and_process(env):
 
             qa_res = trigger_agent("qa", qa_prompt, timeout=3600)
             if not qa_res:
-                handle_retry(item, env, "QA FAILURE: Agent timed out (5m limit) or failed to execute tests.", cur_branch)
+                handle_retry(item, env, "QA FAILURE: Agent returned None (process error).", cur_branch)
+                continue
+            
+            # ── QA Abort/Timeout Interception ────────────────────────────
+            if qa_res.get("aborted"):
+                qa_duration = qa_res.get("raw", {}).get("result", {}).get("meta", {}).get("durationMs", "?")
+                handle_retry(item, env,
+                    f"QA TIMEOUT: OpenClaw QA agent was aborted internally "
+                    f"(durationMs={qa_duration}). Retrying.", cur_branch)
                 continue
                 
             qa_response_text = qa_res.get("response", "").strip()
