@@ -539,3 +539,68 @@ Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'To Do'...
 🔓 Locks/sessions cleared for [all]
 🔓 Locks/sessions cleared for [all]
 🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+
+=> Found 1 task(s) in 'To Do'.
+
+🚀 Processing Task: [BACKEND] Write RSpec Test Suite for Subsidiary
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Progress'...
+Checking out clean working branch 'agent-19'...
+Auto-routing to BACKEND based on title tag.
+Claiming task with BACKEND agent...
+Syncing code files into container workspace /root/.openclaw/workspaces/backend...
+Clearing stale session locks for [backend]...
+🔓 Locks/sessions cleared for [backend]
+Triggering [BACKEND] with I/O Heartbeat (Max Timeout: 3600s)...
+⏳ [BACKEND] Silent for 0s... (Threshold: 900s)
+Error triggering backend (Code 1): Invalid config at /root/.openclaw-config/openclaw.json:\n- models.providers.ollama: Unrecognized key: "timeout"
+- agents.defaults.model: Invalid input
+- agents.list.0.model: Invalid input
+- agents.list.1.model: Invalid input
+- agents.list.2.model: Invalid input
+- agents.list.3.model: Invalid input
+- agents.list.4.model: Invalid input
+Config invalid
+File: /root/.openclaw-config/openclaw.json
+Problem:
+  - models.providers.ollama: Unrecognized key: "timeout"
+  - agents.defaults.model: Invalid input
+  - agents.list.0.model: Invalid input
+  - agents.list.1.model: Invalid input
+  - agents.list.2.model: Invalid input
+  - agents.list.3.model: Invalid input
+  - agents.list.4.model: Invalid input
+
+Run: openclaw doctor --fix
+
+❌ FALLBACK TRIGGERED: BACKEND DEV FAILURE: Agent timed out or failed to execute.
+Reverting Git workspace due to failure...
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'Backlog'...
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]

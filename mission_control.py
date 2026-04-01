@@ -395,6 +395,25 @@ def handle_failure(item, env, reason):
 
     move_task_column(item['id'], item['title'], "Backlog", env)
     
+def handle_retry(item, env, reason, cur_branch=None):
+    print(f"⚠️ RETRY TRIGGERED: {reason}")
+    send_telegram(f"♻️ Task '{item['title']}' failed execution but will be retried.\nReason: {reason}")
+    
+    issue_num = item.get("number")
+    if issue_num:
+        comment_on_issue(issue_num, f"🤖 **Mission Control Update**:\nAgent execution failed. Moving back to **To Do** for an automatic retry.\n\n**Reason:**\n> {reason}", env)
+    
+    project_path = env.get("PROJECT_PATH")
+    if project_path and os.path.exists(project_path):
+        print("Reverting Git workspace due to retry...")
+        subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
+        subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
+        subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
+        if cur_branch:
+            subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
+
+    move_task_column(item['id'], item['title'], "To Do", env)
+
 def check_or_clone_repo(env):
     project_name = env.get("PROJECT_NAME")
     if not project_name:
@@ -470,14 +489,14 @@ def poll_and_process(env):
                 
                 res = trigger_agent("architect", prompt_architect, timeout=3600)
                 if not res:
-                    handle_failure(item, env, "ARCHITECT FAILURE: Agent timed out or failed to execute gracefully.")
+                    handle_retry(item, env, "ARCHITECT FAILURE: Agent timed out or failed to execute gracefully.", cur_branch)
                     continue
                     
                 response_text = res.get("response", "").strip().upper()
                 print(f"Architect Response: {response_text}")
                 
                 if "ERROR" in response_text or ("BACKEND" not in response_text and "FRONTEND" not in response_text):
-                    handle_failure(item, env, f"ARCHITECT ROUTING ERROR: Unable to parse role or task unclear. Response: '{response_text}'")
+                    handle_retry(item, env, f"ARCHITECT ROUTING ERROR: Unable to parse role or task unclear. Response: '{response_text}'", cur_branch)
                     continue
 
                 assigned_agent = "backend" if "BACKEND" in response_text else "frontend"
@@ -521,7 +540,7 @@ def poll_and_process(env):
 
             work_res = trigger_agent(assigned_agent, work_prompt, timeout=3600)
             if not work_res:
-                handle_failure(item, env, f"{assigned_agent.upper()} DEV FAILURE: Agent timed out or failed to execute.")
+                handle_retry(item, env, f"{assigned_agent.upper()} DEV FAILURE: Agent timed out or failed to execute.", cur_branch)
                 continue
             
             work_response_text = work_res.get("response", "").strip()
@@ -683,7 +702,7 @@ def poll_and_process(env):
 
             qa_res = trigger_agent("qa", qa_prompt, timeout=3600)
             if not qa_res:
-                handle_failure(item, env, "QA FAILURE: Agent timed out (5m limit) or failed to execute tests.")
+                handle_retry(item, env, "QA FAILURE: Agent timed out (5m limit) or failed to execute tests.", cur_branch)
                 continue
                 
             qa_response_text = qa_res.get("response", "").strip()
