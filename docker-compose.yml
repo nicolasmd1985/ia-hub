@@ -33,7 +33,7 @@ services:
       - OLLAMA_KEEP_ALIVE=24h             # keep model loaded — avoids 5s reload penalty per request
       - OLLAMA_MAX_LOADED_MODELS=1        # strictly 1 model at a time to prevent extreme RAM/Swap freeze on CPU
       - OLLAMA_NUM_PARALLEL=1             # 1 parallel request at a time
-      - OLLAMA_CONTEXT_LENGTH=32768       # force context window — prevents truncating OpenClaw's system prompt
+      - OLLAMA_CONTEXT_LENGTH=16384       # force context window — halved to 16k to mitigate RAM pressure
       # - CUDA_VISIBLE_DEVICES=             # disable MX110 GPU — too small (2GB) for any model
       - OLLAMA_INTEL_GPU=0                # no intel GPU offloading either
       - OLLAMA_NUM_THREADS=8              # use all 8 CPU threads (i5-8250U has 8 logical cores)
