@@ -26,6 +26,10 @@ echo "=> 4. Injecting Node.js Abort-Suppressor (Patching runtime files)..."
 # We inject 'aborted: false' into the core response logic to stop the 60s kill signal
 docker exec openclaw-gateway sh -c "find /usr/local/lib/node_modules/openclaw -type f -name '*.js' -exec sed -i 's/\"aborted\": true/\"aborted\": false/g' {} +"
 docker exec openclaw-gateway sh -c "find /usr/local/lib/node_modules/openclaw -type f -name '*.js' -exec sed -i 's/60000/86400000/g' {} +"
+
+# ULTIMATE NETWORK HACK: Override global Node.js HTTP/HTTPS timeouts
+docker exec openclaw-gateway sh -c "echo \"require('http').globalAgent.keepAlive = true; require('http').globalAgent.keepAliveMsecs = 86400000; require('http').globalAgent.timeout = 86400000; require('https').globalAgent.timeout = 86400000;\" > /usr/local/lib/node_modules/openclaw/network_hack.js && find /usr/local/lib/node_modules/openclaw -name '*.js' -maxdepth 3 -exec sed -i '1i require(\"./network_hack.js\");' {} +"
+
 docker restart openclaw-gateway
 
 echo "=> 5. Re-launching Mission Control Orchestrator (v22)..."
