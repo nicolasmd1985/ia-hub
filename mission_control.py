@@ -596,9 +596,14 @@ def poll_and_process(env):
             response_lower = work_response_text.lower()
             is_timeout_text = any(sig in response_lower for sig in TIMEOUT_STRINGS)
             
-            is_valid_report = len(work_response_text.strip()) > 50 and not is_timeout_text
-            if len(work_response_text.strip()) <= 50 and "ERROR:" in work_response_text.upper():
+            is_valid_report = (len(work_response_text.strip()) > 50 and not is_timeout_text)
+            if work_res.get("progress_detected"):
+                 # Override validation: if files were written, the work is salvageable despite the gateway timeout message
+                 is_valid_report = True
+            
+            if len(work_response_text.strip()) <= 50 and "ERROR:" in work_response_text.upper() and not work_res.get("progress_detected"):
                  is_valid_report = False
+            
             if not is_valid_report:
                 print(f"❌ DEV REJECTION: {work_response_text}")
                 send_telegram(f"♻️ Task '{item['title']}' failed DEV execution. Moving back to 'To Do' for a retry.\nReason: {work_response_text}")
@@ -725,6 +730,9 @@ def poll_and_process(env):
             # 4. Trigger QA turn
             print("Clearing stale session locks for [qa]...")
             safe_clear_locks("qa")
+            # Clear stale QA log to prevent false successes from previous turns
+            qa_log_path = os.path.join(project_path, "qa_heartbeat.log")
+            if os.path.exists(qa_log_path): os.remove(qa_log_path)
             # Build a list of actual files the backend agent changed so QA can review them specifically
             changed_files = []
             for line in git_status.stdout.strip().split("\n"):
@@ -740,8 +748,8 @@ def poll_and_process(env):
                 "The backend developer has finished implementing. The following code files were modified:\n"
                 f"{changed_files_str}\n\n"
                 "Your job is to ACTUALLY RUN THE TEST SUITE to verify the code genuinely works!\n"
-                "1. Use your 'exec' tool to run this exact command: `docker exec ordenapp_web_container bundle exec rspec`\n"
-                "   (If a specific spec file is listed above, you can run `docker exec ordenapp_web_container bundle exec rspec <path>` to save time).\n"
+                "1. Use your 'exec' tool to run this exact command: `docker exec ordenapp_web_container bundle exec rspec | tee /root/project/qa_heartbeat.log`\n"
+                "   (This ensures the results are saved even if the connection times out).\n"
                 "2. Wait for the test result output from your exec tool.\n"
                 "3. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
                 "4. If the test fails or hits a compiler/syntax error, reply with: ERROR: [paste the exact ruby failure trace here so the Dev can fix it]\n"
@@ -756,12 +764,26 @@ def poll_and_process(env):
             # ── QA Abort/Timeout Interception ────────────────────────────
             if qa_res.get("aborted"):
                 qa_duration = qa_res.get("raw", {}).get("result", {}).get("meta", {}).get("durationMs", "?")
-                handle_retry(item, env,
-                    f"QA TIMEOUT: OpenClaw QA agent was aborted internally "
-                    f"(durationMs={qa_duration}). Retrying.", cur_branch)
-                continue
                 
-            qa_response_text = qa_res.get("response", "").strip()
+                # FINAL RESILIENCE CHECK: Look for the heartbeat log on the host
+                qa_log_path = os.path.join(project_path, "qa_heartbeat.log")
+                if os.path.exists(qa_log_path):
+                    with open(qa_log_path, 'r') as f:
+                        log_content = f.read()
+                        if "0 failures" in log_content and "passed" in log_content.lower():
+                            print("⚠️  QA ABORTED but Heartbeat log shows SUCCESS. Salvaging QA result...")
+                            qa_response_text = "SUCCESS (Salvagued from heartbeat log)"
+                        else:
+                            print(f"⚠️  QA ABORTED and log shows failures or is incomplete. Failing.")
+                            handle_retry(item, env, f"QA TIMEOUT/FAILURE: {qa_duration}ms. Log: {log_content[-100:]}", cur_branch)
+                            continue
+                else:
+                    handle_retry(item, env,
+                        f"QA TIMEOUT: OpenClaw QA agent was aborted internally "
+                        f"(durationMs={qa_duration}). No heartbeat log found. Retrying.", cur_branch)
+                    continue
+            else:
+                qa_response_text = qa_res.get("response", "").strip()
             print(f"QA Response: {qa_response_text}")
             
             if "SUCCESS" not in qa_response_text.upper() or "ERROR" in qa_response_text.upper():
