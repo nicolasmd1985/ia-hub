@@ -793,11 +793,14 @@ def poll_and_process(env):
                 if item.get("number"):
                     comment_on_issue(item.get("number"), f"🤖 **QA Rejected Previous Attempt:**\n\nYou must fix the errors identified below and try again:\n\n> {qa_response_text}", env)
                 
-                print("Reverting Git workspace due to QA failure...")
-                subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
-                subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
-                subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
-                subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
+                if not qa_res.get("aborted"):
+                    print("Reverting Git workspace due to QA rejection...")
+                    subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
+                    subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
+                    subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
+                    subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
+                else:
+                    print("QA TIMEOUT: Preserving workspace (Backend work salvaged). Moving back to To Do for retry.")
                 
                 move_task_column(item['id'], item['title'], "To Do", env)
                 continue

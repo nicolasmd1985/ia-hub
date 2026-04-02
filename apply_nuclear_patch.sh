@@ -25,6 +25,7 @@ sleep 15
 echo "=> 4. Injecting Node.js Abort-Suppressor (Patching runtime files)..."
 # We inject 'aborted: false' into the core response logic to stop the 60s kill signal
 docker exec openclaw-gateway sh -c "find /usr/local/lib/node_modules/openclaw -type f -name '*.js' -exec sed -i 's/\"aborted\": true/\"aborted\": false/g' {} +"
+docker exec openclaw-gateway sh -c "find /usr/local/lib/node_modules/openclaw -type f -name '*.js' -exec sed -i 's/60000/86400000/g' {} +"
 docker restart openclaw-gateway
 
 echo "=> 5. Re-launching Mission Control Orchestrator (v22)..."
