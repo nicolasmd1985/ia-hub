@@ -21,7 +21,11 @@
       },
       "models": {
         "ollama/qwen2.5:7b": {
-          "alias": "Qwen 7B (Endurance Mode)"
+          "alias": "Qwen 7B (Endurance Mode)",
+          "streaming": false
+        },
+        "ollama/qwen2.5:3b": {
+          "streaming": false
         }
       }
     },
