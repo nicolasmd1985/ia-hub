@@ -611,11 +611,11 @@ def poll_and_process(env):
                 if item.get("number"):
                     comment_on_issue(item.get("number"), f"🤖 **Dev Agent Execution Failed:**\n\nYou must fix context errors and try again:\n\n> {work_response_text}", env)
                 
-                print("Reverting Git workspace due to Dev failure...")
-                subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
-                subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
-                subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
-                subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
+                print("⚠️ [RESILIENCE] Skipping Git workspace reset due to Dev failure (preserving partial work).")
+                # subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
+                # subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
+                # subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
+                # subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
                 
                 move_task_column(item['id'], item['title'], "To Do", env)
                 continue
@@ -707,10 +707,11 @@ def poll_and_process(env):
                             f"🤖 **Agent Execution Warning:**\n\nThe agent described creating files but "
                             f"did not actually write them to disk. Moving back to **To Do** for a retry.\n\n"
                             f"> {work_response_text[:500]}", env)
-                    subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
-                    subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
-                    subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
-                    subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
+                    print("⚠️ [RESILIENCE] Skipping Git workspace reset due to Hallucination guard (preserving partial work).")
+                    # subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
+                    # subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
+                    # subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
+                    # subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
                     move_task_column(item['id'], item['title'], "To Do", env)
                     continue
 
@@ -794,11 +795,11 @@ def poll_and_process(env):
                     comment_on_issue(item.get("number"), f"🤖 **QA Rejected Previous Attempt:**\n\nYou must fix the errors identified below and try again:\n\n> {qa_response_text}", env)
                 
                 if not qa_res.get("aborted"):
-                    print("Reverting Git workspace due to QA rejection...")
-                    subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
-                    subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
-                    subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
-                    subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
+                    print("⚠️ [RESILIENCE] Skipping Git workspace reset due to QA rejection (preserving partial work).")
+                    # subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
+                    # subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
+                    # subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
+                    # subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
                 else:
                     print("QA TIMEOUT: Preserving workspace (Backend work salvaged). Moving back to To Do for retry.")
                 
