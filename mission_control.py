@@ -306,13 +306,14 @@ def trigger_agent(agent_id, message, timeout=86400):
     """Run an agent with an I/O heartbeat monitor to detect true deadlocks."""
     cmd = [
         "docker", "exec", "openclaw-gateway", 
-        "openclaw", "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", "86400"
+        "openclaw", "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", "86450"
     ]
     print(f"Triggering [{agent_id.upper()}] with I/O Heartbeat (Max Timeout: {timeout}s)...")
     
     # Initial I/O state
     last_io_time = time.time()
     last_io_timestamp = get_latest_io_timestamp(agent_id)
+    progress_detected = False
     
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     
@@ -357,10 +358,10 @@ def trigger_agent(agent_id, message, timeout=86400):
                                 duration_ms = parsed.get("result", {}).get("meta", {}).get("durationMs", "?")
                                 print(f"🛑 AGENT TIMEOUT DETECTED for [{agent_id}]: aborted={aborted}, durationMs={duration_ms}")
                                 print(f"   Response text: {text[:200]}")
-                                return {"response": text, "raw": parsed, "aborted": True}
+                                return {"response": text, "raw": parsed, "aborted": True, "progress_detected": progress_detected}
                             
-                            return {"response": text, "raw": parsed, "aborted": False}
-                        return {"response": "", "raw": {}, "aborted": False}
+                            return {"response": text, "raw": parsed, "aborted": False, "progress_detected": progress_detected}
+                        return {"response": "", "raw": {}, "aborted": False, "progress_detected": progress_detected}
                     except json.JSONDecodeError:
                         print(f"Error parsing JSON from {agent_id}: {stdout}")
                         return None
@@ -381,6 +382,7 @@ def trigger_agent(agent_id, message, timeout=86400):
             current_io_timestamp = get_latest_io_timestamp(agent_id)
             if current_io_timestamp > last_io_timestamp:
                 # Progress detected! Update markers
+                progress_detected = True
                 last_io_timestamp = current_io_timestamp
                 last_io_time = current_time
                 elapsed = int(current_time - start_time)
@@ -570,7 +572,8 @@ def poll_and_process(env):
             # ── Strict Abort/Timeout Interception ────────────────────────
             # If OpenClaw internally timed out (60s default or any other),
             # do NOT proceed to QA. Intercept immediately and retry.
-            if work_res.get("aborted"):
+            # EXCEPTION: If we detected I/O progress (files written), we SALVAGE the work.
+            if work_res.get("aborted") and not work_res.get("progress_detected"):
                 duration_ms = work_res.get("raw", {}).get("result", {}).get("meta", {}).get("durationMs", "?")
                 reason = (
                     f"{assigned_agent.upper()} DEV TIMEOUT: OpenClaw agent was aborted internally "
@@ -580,6 +583,9 @@ def poll_and_process(env):
                 )
                 handle_retry(item, env, reason, cur_branch)
                 continue
+            
+            if work_res.get("aborted") and work_res.get("progress_detected"):
+                print(f"⚠️  {assigned_agent.upper()} ABORTED but files were written. Salvaging partial work...")
             
             work_response_text = work_res.get("response", "").strip()
             print(f"Dev Agent Response: {work_response_text}")

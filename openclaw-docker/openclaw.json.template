@@ -16,11 +16,11 @@
     "defaults": {
       "timeoutSeconds": 86400,
       "model": {
-        "primary": "ollama/qwen2.5:7b",
+        "primary": "ollama/qwen2.5:3b",
         "fallbacks": []
       },
       "models": {
-        "ollama/qwen2.5:7b": {
+        "ollama/qwen2.5:3b": {
           "alias": "Qwen 7B (Endurance Mode)",
           "streaming": false
         },
@@ -36,7 +36,7 @@
         "name": "Architect",
         "workspace": "/root/.openclaw/workspaces/architect",
         "model": {
-          "primary": "ollama/qwen2.5:7b",
+          "primary": "ollama/qwen2.5:3b",
           "fallbacks": []
         },
         "identity": { "name": "Architect", "emoji": "🏗️", "theme": "task routing orchestrator" },
@@ -47,7 +47,7 @@
         "name": "Backend Developer",
         "workspace": "/root/.openclaw/workspaces/backend",
         "model": {
-          "primary": "ollama/qwen2.5:7b",
+          "primary": "ollama/qwen2.5:3b",
           "fallbacks": []
         },
         "identity": { "name": "Backend", "emoji": "⚙️", "theme": "Ruby on Rails backend specialist" },
@@ -58,7 +58,7 @@
         "name": "Frontend Developer",
         "workspace": "/root/.openclaw/workspaces/frontend",
         "model": {
-          "primary": "ollama/qwen2.5:7b",
+          "primary": "ollama/qwen2.5:3b",
           "fallbacks": []
         },
         "identity": { "name": "Frontend", "emoji": "🎨", "theme": "Hotwire and Turbo frontend specialist" },
@@ -69,7 +69,7 @@
         "name": "Analyst",
         "workspace": "/root/.openclaw/workspaces/analyst",
         "model": {
-          "primary": "ollama/qwen2.5:7b",
+          "primary": "ollama/qwen2.5:3b",
           "fallbacks": []
         },
         "identity": { "name": "Analyst", "emoji": "🔍", "theme": "software architecture analyst" },
@@ -80,7 +80,7 @@
         "name": "QA Engineer",
         "workspace": "/root/.openclaw/workspaces/qa",
         "model": {
-          "primary": "ollama/qwen2.5:7b",
+          "primary": "ollama/qwen2.5:3b",
           "fallbacks": []
         },
         "identity": { "name": "QA", "emoji": "🧪", "theme": "Quality assurance and testing specialist" },
@@ -110,12 +110,12 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen2.5:7b",
+            "id": "qwen2.5:3b",
             "name": "Qwen2.5 7B — Endurance Mode",
             "reasoning": false,
             "input": ["text"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-            "contextWindow": 16384,
+            "contextWindow": 8192,
             "maxTokens": 8192
           },
           {
@@ -124,7 +124,7 @@
             "reasoning": false,
             "input": ["text"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-            "contextWindow": 16384,
+            "contextWindow": 8192,
             "maxTokens": 4096
           }
         ]
