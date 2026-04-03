@@ -23,14 +23,14 @@ for i in {1..10}; do
   sleep 5
 done
 
-echo "=> 5. Re-launching Mission Control v33..."
+echo "=> 5. Re-launching Mission Control v34..."
 pkill -f "python3.*mission_control.py" || true
 # Clean up any stale logs
-rm -f mission_logs_v33.out
-nohup python3 mission_control.py > mission_logs_v33.out 2>&1 &
+rm -f mission_logs_v34.out
+nohup python3 -u mission_control.py > mission_logs_v34.out 2>&1 &
 
 echo "=============================================================================="
-echo "✅ MISSION: BYPASS & SANE COMPLETE"
-echo "Strategy: Terminal CLI bypassed. OpenClaw schema validated."
+echo "✅ MISSION: BYPASS & SANE COMPLETE (v34)"
+echo "Strategy: Terminal CLI restored with --timeout. Logging unbuffered."
 echo "=============================================================================="
-tail -f mission_logs_v33.out
+tail -f mission_logs_v34.out
