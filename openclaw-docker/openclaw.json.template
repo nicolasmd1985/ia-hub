@@ -30,7 +30,6 @@
         "default": true,
         "name": "Architect",
         "workspace": "/root/.openclaw/workspaces/architect",
-        "timeoutSeconds": 1800,
         "model": "ollama/qwen2.5:3b",
         "identity": { "name": "Architect", "emoji": "🏗️", "theme": "task routing orchestrator" },
         "tools": { "profile": "minimal" }
@@ -39,7 +38,6 @@
         "id": "backend",
         "name": "Backend Developer",
         "workspace": "/root/.openclaw/workspaces/backend",
-        "timeoutSeconds": 1800,
         "model": "ollama/qwen2.5:3b",
         "identity": { "name": "Backend", "emoji": "⚙️", "theme": "Ruby on Rails backend specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
@@ -48,7 +46,6 @@
         "id": "frontend",
         "name": "Frontend Developer",
         "workspace": "/root/.openclaw/workspaces/frontend",
-        "timeoutSeconds": 1800,
         "model": "ollama/qwen2.5:3b",
         "identity": { "name": "Frontend", "emoji": "🎨", "theme": "Hotwire and Turbo frontend specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
@@ -57,7 +54,6 @@
         "id": "analyst",
         "name": "Analyst",
         "workspace": "/root/.openclaw/workspaces/analyst",
-        "timeoutSeconds": 1800,
         "model": "ollama/qwen2.5:3b",
         "identity": { "name": "Analyst", "emoji": "🔍", "theme": "software architecture analyst" },
         "tools": { "profile": "minimal" }
@@ -66,7 +62,6 @@
         "id": "qa",
         "name": "QA Engineer",
         "workspace": "/root/.openclaw/workspaces/qa",
-        "timeoutSeconds": 1800,
         "model": "ollama/qwen2.5:3b",
         "identity": { "name": "QA", "emoji": "🧪", "theme": "Quality assurance and testing specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
