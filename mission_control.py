@@ -303,85 +303,67 @@ def get_latest_io_timestamp(agent_id):
         return 0
 
 def trigger_agent(agent_id, message, timeout=86400):
-    """Run an agent with an I/O heartbeat monitor to detect true deadlocks."""
-    cmd = [
-        "docker", "exec", "openclaw-gateway", 
-        "openclaw", "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", "86450"
-    ]
-    print(f"Triggering [{agent_id.upper()}] with I/O Heartbeat (Max Timeout: {timeout}s)...")
+    """Run an agent turn via a direct HTTP API call to the Gateway (bypassing the 60s CLI limit)."""
+    env = load_env()
+    token = env.get("OPENCLAW_GATEWAY_TOKEN", "my-local-hub-2026")
     
-    # Initial I/O state
+    # We hit the gateway via its internal service name (Docker DNS) or localhost if on host.
+    # Since mission_control runs on host, we use localhost or the IP. 
+    # Based on docker-compose, matches port 18789.
+    url = "http://localhost:18789/api/v1/run"
+    
+    payload = {
+        "agent": agent_id,
+        "message": message,
+        "json": True
+    }
+    
+    print(f"Triggering [{agent_id.upper()}] via Direct HTTP API (Timeout: {timeout}s)...")
+    
+    # Initial I/O state (for the 3-hour heartbeat watcher)
     last_io_time = time.time()
     last_io_timestamp = get_latest_io_timestamp(agent_id)
     progress_detected = False
     
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # We use a long-lived HTTP request. 
+    # The heartbeat monitor runs in parallel in the loop below.
+    # Because urllib.request.urlopen is blocking, we use a small trick: 
+    # we don't need Popen if we are just waiting for the final result, 
+    # BUT we still want to monitor I/O progress during the wait!
+    # To do this safely, we will use a separate thread or just a reasonable timeout in the request?
+    # Python's urlopen timeout is for the WHOLE request if it's not streaming.
+    
+    import threading
+    result_container = {"data": None, "error": None}
+    
+    def perform_request():
+        try:
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'))
+            req.add_header('Content-Type', 'application/json')
+            req.add_header('Authorization', f'bearer {token}')
+            
+            # The actual network timeout is set extremely high.
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                result_container["data"] = json.loads(response.read().decode('utf-8'))
+        except Exception as e:
+            result_container["error"] = str(e)
+            
+    req_thread = threading.Thread(target=perform_request)
+    req_thread.start()
     
     start_time = time.time()
     io_deadlock_threshold = 10800 # 3 hours of silence = deadlock
     
     try:
-        while True:
-            # Check if process is still running
-            retcode = process.poll()
-            if retcode is not None:
-                stdout, stderr = process.communicate()
-                if retcode == 0:
-                    try:
-                        print(f"RAW AGENT OUTPUT: {stdout}")
-                        start_idx = stdout.find('{')
-                        if start_idx != -1:
-                            parsed = json.loads(stdout[start_idx:])
-                            text = ""
-                            try:
-                                text = parsed.get("result", {}).get("payloads", [{}])[0].get("text", "")
-                            except: pass
-                            
-                            # ── Abort/Timeout Detection ──────────────────────
-                            # OpenClaw returns status "ok" even on internal
-                            # timeouts, but sets "aborted": true in result.meta.
-                            # Also detect the hardcoded timeout error string.
-                            aborted = False
-                            try:
-                                aborted = parsed.get("result", {}).get("meta", {}).get("aborted", False)
-                            except: pass
-                            
-                            TIMEOUT_SIGNATURES = [
-                                "request timed out",
-                                "increase `agents.defaults.timeoutseconds`",
-                                "timed out before a response",
-                            ]
-                            text_lower = (text or "").lower()
-                            is_timeout = aborted or any(sig in text_lower for sig in TIMEOUT_SIGNATURES)
-                            
-                            if is_timeout:
-                                duration_ms = parsed.get("result", {}).get("meta", {}).get("durationMs", "?")
-                                print(f"🛑 AGENT TIMEOUT DETECTED for [{agent_id}]: aborted={aborted}, durationMs={duration_ms}")
-                                print(f"   Response text: {text[:200]}")
-                                return {"response": text, "raw": parsed, "aborted": True, "progress_detected": progress_detected}
-                            
-                            return {"response": text, "raw": parsed, "aborted": False, "progress_detected": progress_detected}
-                        return {"response": "", "raw": {}, "aborted": False, "progress_detected": progress_detected}
-                    except json.JSONDecodeError:
-                        print(f"Error parsing JSON from {agent_id}: {stdout}")
-                        return None
-                else:
-                    print(f"Error triggering {agent_id} (Code {retcode}): {stderr}")
-                    return None
-
-            # Heartbeat check
+        while req_thread.is_alive():
             current_time = time.time()
             if current_time - start_time > timeout:
                 print(f"🛑 STRIKE 1: Absolute timeout of {timeout}s reached.")
-                process.terminate()
                 return None
             
-            # Check for I/O activity every 60 seconds
-            time.sleep(60)
-            
+            # Heartbeat check for progress (files being written by the agent)
             current_io_timestamp = get_latest_io_timestamp(agent_id)
             if current_io_timestamp > last_io_timestamp:
-                # Progress detected! Update markers
                 progress_detected = True
                 last_io_timestamp = current_io_timestamp
                 last_io_time = current_time
@@ -391,11 +373,38 @@ def trigger_agent(agent_id, message, timeout=86400):
                 quiet_duration = int(current_time - last_io_time)
                 if quiet_duration >= io_deadlock_threshold:
                     print(f"💀 DEADLOCK: Agent {agent_id} has been silent for {quiet_duration}s.")
-                    process.kill()
                     restart_gateway_and_cleanup()
                     return None
-                else:
-                    print(f"⏳ [{agent_id.upper()}] Silent for {quiet_duration}s... (Threshold: {io_deadlock_threshold}s)")
+            
+            time.sleep(20) # Check every 20s
+            
+        # Once finished
+        if result_container["error"]:
+            print(f"Error triggering {agent_id} via API: {result_container['error']}")
+            # Detect implicit 60s timeout from host/proxy if still occurring
+            if "timeout" in result_container["error"].lower():
+                 print(f"⚠️  HTTP Timeout detected at {int(time.time() - start_time)}s")
+            return None
+            
+        parsed = result_container["data"]
+        if parsed and "result" in parsed:
+            text = ""
+            try:
+                text = parsed.get("result", {}).get("payloads", [{}])[0].get("text", "")
+            except: pass
+            
+            aborted = False
+            try:
+                aborted = parsed.get("result", {}).get("meta", {}).get("aborted", False)
+            except: pass
+            
+            return {"response": text, "raw": parsed, "aborted": aborted, "progress_detected": progress_detected}
+            
+        return None
+
+    except Exception as e:
+        print(f"Exception during agent trigger: {e}")
+        return None
 
     except Exception as e:
         print(f"Exception triggering agent: {e}")

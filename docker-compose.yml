@@ -96,18 +96,19 @@ services:
       - OPENCLAW_GATEWAY_HOST=0.0.0.0
       - HOST=0.0.0.0
       # Node memory — keep reasonable, leave headroom for Ollama models
-      - NODE_OPTIONS=--max-old-space-size=768
+      - NODE_OPTIONS=--max-old-space-size=1024
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - GITHUB_USER=${GITHUB_USER}
       - GITHUB_REPO=${GITHUB_REPO}
       - PROJECT_NUMBER=${PROJECT_NUMBER}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - OPENCLAW_AGENTS_DEFAULTS_TIMEOUT_SECONDS=86400
-      - OPENCLAW_AGENTS_DEFAULTS_RUN_TIMEOUT_SECONDS=86400
+      - OPENCLAW_AGENTS_DEFAULTS_TIMEOUT_SECONDS=86450
+      - OPENCLAW_AGENTS_DEFAULTS_RUN_TIMEOUT_SECONDS=86450
+      - DEBUG=openclaw:*
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:18789/health || exit 1"]
-      interval: 20s
-      timeout: 10s
+      interval: 30s
+      timeout: 30s
       retries: 5
-      start_period: 60s
+      start_period: 120s

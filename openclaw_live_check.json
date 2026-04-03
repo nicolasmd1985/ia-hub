@@ -14,13 +14,18 @@
   },
   "agents": {
     "defaults": {
-      "timeoutSeconds": 86450,
-      "bootstrapMaxChars": 5000,
-      "model": "ollama/qwen2.5:3b",
+      "timeoutSeconds": 86400,
+      "model": {
+        "primary": "ollama/qwen2.5:7b",
+        "fallbacks": []
+      },
       "models": {
+        "ollama/qwen2.5:7b": {
+          "alias": "Qwen 7B (Endurance Mode)",
+          "streaming": false
+        },
         "ollama/qwen2.5:3b": {
-          "alias": "Qwen 3B (Endurance Mode)",
-          "streaming": true
+          "streaming": false
         }
       }
     },
@@ -30,8 +35,10 @@
         "default": true,
         "name": "Architect",
         "workspace": "/root/.openclaw/workspaces/architect",
-        "timeoutSeconds": 1800,
-        "model": "ollama/qwen2.5:3b",
+        "model": {
+          "primary": "ollama/qwen2.5:7b",
+          "fallbacks": []
+        },
         "identity": { "name": "Architect", "emoji": "🏗️", "theme": "task routing orchestrator" },
         "tools": { "profile": "minimal" }
       },
@@ -39,8 +46,10 @@
         "id": "backend",
         "name": "Backend Developer",
         "workspace": "/root/.openclaw/workspaces/backend",
-        "timeoutSeconds": 1800,
-        "model": "ollama/qwen2.5:3b",
+        "model": {
+          "primary": "ollama/qwen2.5:7b",
+          "fallbacks": []
+        },
         "identity": { "name": "Backend", "emoji": "⚙️", "theme": "Ruby on Rails backend specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
       },
@@ -48,8 +57,10 @@
         "id": "frontend",
         "name": "Frontend Developer",
         "workspace": "/root/.openclaw/workspaces/frontend",
-        "timeoutSeconds": 1800,
-        "model": "ollama/qwen2.5:3b",
+        "model": {
+          "primary": "ollama/qwen2.5:7b",
+          "fallbacks": []
+        },
         "identity": { "name": "Frontend", "emoji": "🎨", "theme": "Hotwire and Turbo frontend specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
       },
@@ -57,8 +68,10 @@
         "id": "analyst",
         "name": "Analyst",
         "workspace": "/root/.openclaw/workspaces/analyst",
-        "timeoutSeconds": 1800,
-        "model": "ollama/qwen2.5:3b",
+        "model": {
+          "primary": "ollama/qwen2.5:7b",
+          "fallbacks": []
+        },
         "identity": { "name": "Analyst", "emoji": "🔍", "theme": "software architecture analyst" },
         "tools": { "profile": "minimal" }
       },
@@ -66,8 +79,10 @@
         "id": "qa",
         "name": "QA Engineer",
         "workspace": "/root/.openclaw/workspaces/qa",
-        "timeoutSeconds": 1800,
-        "model": "ollama/qwen2.5:3b",
+        "model": {
+          "primary": "ollama/qwen2.5:7b",
+          "fallbacks": []
+        },
         "identity": { "name": "QA", "emoji": "🧪", "theme": "Quality assurance and testing specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
       }
@@ -95,8 +110,8 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen2.5:3b",
-            "name": "Qwen2.5 3B (Host-Direct)",
+            "id": "qwen2.5:7b",
+            "name": "Qwen2.5 7B — Endurance Mode",
             "reasoning": false,
             "input": ["text"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },

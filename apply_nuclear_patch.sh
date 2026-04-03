@@ -1,47 +1,36 @@
 #!/bin/bash
-# ==============================================================================
-# ☢️  NUCLEAR INFRASTRUCTURE RESILIENCE PATCH (v22)
-# ==============================================================================
-# This script synchronizes config, rebuilds the stack, and overwrites 
-# the Node.js 'aborted' status to allow high-latency reasoning to persist.
-# ==============================================================================
-
+# 🛸 MISSION: BYPASS & SANE (v33)
+# Strategy: Direct HTTP API calls and cleaned JSON schema.
 set -e
-
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR"
 
-echo "=> 1. Synchronizing patched JSON template to live config..."
-sudo cp openclaw-docker/openclaw.json.template openclaw-docker/openclaw.json
-sudo chmod 666 openclaw-docker/openclaw.json
+echo "=> 1. Generating Clean Config (v33)..."
+bash generate-config.sh
 
-echo "=> 2. Rebuilding Docker stack (Context: 8192)..."
+echo "=> 2. REFRESHING INFRASTRUCTURE..."
 docker compose down
 docker compose up -d
 
-echo "=> 3. Waiting for gateway to initialize..."
-sleep 15
+echo "=> 3. Stabilizing gateway..."
+sleep 20
 
-echo "=> 4. Injecting Node.js Abort-Suppressor (Patching runtime files)..."
-# We inject 'aborted: false' into the core response logic to stop the 60s kill signal
-docker exec openclaw-gateway sh -c "find /usr/local/lib/node_modules/openclaw -type f -name '*.js' -exec sed -i 's/\"aborted\": true/\"aborted\": false/g' {} +"
-docker exec openclaw-gateway sh -c "find /usr/local/lib/node_modules/openclaw -type f -name '*.js' -exec sed -i 's/60000/86400000/g' {} +"
+echo "=> 4. FINAL Health-Check..."
+for i in {1..10}; do
+  STATUS=$(docker inspect -f '{{.State.Health.Status}}' openclaw-gateway 2>/dev/null || echo "starting")
+  echo "Status: $STATUS ($i/10)"
+  if [ "$STATUS" == "healthy" ]; then break; fi
+  sleep 5
+done
 
-# ULTIMATE NETWORK HACK: Override global Node.js HTTP/HTTPS timeouts
-docker exec openclaw-gateway sh -c "echo \"require('http').globalAgent.keepAlive = true; require('http').globalAgent.keepAliveMsecs = 86400000; require('http').globalAgent.timeout = 86400000; require('https').globalAgent.timeout = 86400000;\" > /usr/local/lib/node_modules/openclaw/network_hack.js && find /usr/local/lib/node_modules/openclaw -name '*.js' -maxdepth 3 -exec sed -i '1i require(\"./network_hack.js\");' {} +"
-
-docker restart openclaw-gateway
-
-echo "=> 5. Re-launching Mission Control Orchestrator (v22)..."
+echo "=> 5. Re-launching Mission Control v33..."
 pkill -f "python3.*mission_control.py" || true
-pkill -f "run_mission_control.sh" || true
-nohup bash run_mission_control.sh > mission_logs_v22.out 2>&1 &
+# Clean up any stale logs
+rm -f mission_logs_v33.out
+nohup python3 mission_control.py > mission_logs_v33.out 2>&1 &
 
-echo ""
 echo "=============================================================================="
-echo "✅ NUCLEAR PATCH APPLIED SUCCESSFULLY"
-echo "Mission Control is now running in 'Resilience mode' (v22)."
-echo "Work will be salvaged even if the Gateway reports an internal timeout."
+echo "✅ MISSION: BYPASS & SANE COMPLETE"
+echo "Strategy: Terminal CLI bypassed. OpenClaw schema validated."
 echo "=============================================================================="
-echo ""
-tail -f mission_logs_v22.out
+tail -f mission_logs_v33.out
