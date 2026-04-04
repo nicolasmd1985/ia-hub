@@ -771,12 +771,13 @@ def poll_and_process(env):
                 f"{changed_files_str}\n\n"
                 "Your job is to ACTUALLY RUN THE TEST SUITE to verify the code genuinely works!\n"
                 "1. Use your 'exec' tool to first run `docker ps` to find the exact name of the Ruby on Rails container (it should look like 'ordenapp-web-1' or similar).\n"
-                "2. Use that exact name to run the test suite: `docker exec <EXACT_NAME> bundle exec rspec | tee /root/project/qa_heartbeat.log`\n"
-                "   (This ensures the results are saved even if the connection times out).\n"
-                "3. Wait for the test result output from your exec tool.\n"
-                "4. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
-                "5. If the test fails or hits a compiler/syntax error, reply with: ERROR: [paste the exact ruby failure trace here so the Dev can fix it]\n"
-                "6. You MUST use your exec tool before replying. NEVER guess!"
+                "2. If the container found is not running, or no container is found, report it clearly.\n"
+                "3. Use that exact name to run the test suite with a login shell: `docker exec <EXACT_NAME> /bin/bash -l -c \"bundle exec rspec | tee /root/project/qa_heartbeat.log\"`\n"
+                "   (Using /bin/bash -l -c ensures that the Ruby environment and 'bundle' are correctly loaded into the PATH).\n"
+                "4. Wait for the test result output from your exec tool.\n"
+                "5. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
+                "6. If the test fails or hits a compiler/syntax error, reply with: ERROR: [paste the exact ruby failure trace here so the Dev can fix it]\n"
+                "7. You MUST use your exec tool before replying. NEVER guess!"
             )
 
             qa_res = trigger_agent("qa", qa_prompt, timeout=3600)

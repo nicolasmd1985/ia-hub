@@ -1,0 +1,206 @@
+nohup: ignoring input
+=====================================================
+ 🛸 Mission Control Autonomous Loop Activated
+ Polling GitHub Project board every 300 seconds...
+=====================================================
+[Sat Apr  4 08:08:25 AM EDT 2026] 🛰️ Checking board...
+==============================================
+🛸 Mission Control Script Core Initialized (v42)
+==============================================
+==============================================
+🚀 Mission Control active.
+🔁 Entering continuous Kanban polling loop...
+==============================================
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+
+=> Found 1 task(s) in 'To Do'.
+
+🚀 Processing Task: [BACKEND] Write RSpec Test Suite for Subsidiary
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Progress'...
+Resuming on existing branch 'agent-21'...
+Auto-routing to BACKEND based on title tag.
+Claiming task with BACKEND agent...
+Syncing code files into container workspace /root/.openclaw/workspaces/backend...
+Clearing stale session locks for [backend]...
+🔓 Locks/sessions cleared for [backend]
+Triggering [BACKEND] via CLI (Timeout: 3600s)...
+💓 [BACKEND] Heartbeat: Active progress detected (0s elapsed)
+💓 [BACKEND] Heartbeat: Active progress detected (985s elapsed)
+💓 [BACKEND] Heartbeat: Active progress detected (1106s elapsed)
+RAW AGENT OUTPUT (v37): {
+  "runId": "846fcde3-3aee-4553-a641-e35daa1c828f",
+  "status": "ok",
+  "summary": "completed",
+  "result": {
+    "payloads": [
+      {
+        "text": "I have written all the required spec files and factory definitions for the Subsidiary model and its related GraphQL mutation. Below is a summary of each file I created or modified:\n\n### `spec/factories/subsidiaries.rb`\n- Created a FactoryBot for the Subsidiary model with all required fields including `corporation` and `status`.\n\n### `spec/...
+Dev Agent Response: I have written all the required spec files and factory definitions for the Subsidiary model and its related GraphQL mutation. Below is a summary of each file I created or modified:
+
+### `spec/factories/subsidiaries.rb`
+- Created a FactoryBot for the Subsidiary model with all required fields including `corporation` and `status`.
+
+### `spec/models/subsidiary_spec.rb`
+- Added tests for associations and callbacks.
+- Included validation checks for required fields and association validations.
+
+### `spec/factories/statuses.rb` and `spec/factories/corporations.rb`
+- Created Factories for `Status` and `Corporation` models, ensuring that the Subsidiary model can be created with valid associations.
+
+### `spec/graphql/mutations/subsidiaries/create_subsidiary_spec.rb`
+- Added test cases for both an admin user and a non-admin user.
+- Included validation errors for missing required fields.
+
+The `AGENT_REPORT.md` file at the workspace root contains a summary of all the changes made, ensuring that the Subsidiary model and its mutations are thoroughly tested.
+
+If there are any additional files or tests needed, please let me know. Otherwise, I am ready to proceed with the next steps.
+Syncing modifications back from container to host...
+✅ BACKEND turn complete.
+📄 Report saved persistently on host at: /home/nicolasmd/Development/agents-developmet/ordenapp_web/agent-report/2026-04-04/agent_report.md
+✅ Code touch detected. Moving to QA verification workflow.
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Review QA'...
+Clearing stale session locks for [qa]...
+🔓 Locks/sessions cleared for [qa]
+Triggering [QA] via CLI (Timeout: 3600s)...
+💓 [QA] Heartbeat: Active progress detected (0s elapsed)
+💓 [QA] Heartbeat: Active progress detected (724s elapsed)
+💓 [QA] Heartbeat: Active progress detected (764s elapsed)
+RAW AGENT OUTPUT (v37): {
+  "runId": "3442f58d-fca3-4247-bdf3-c6d85396f271",
+  "status": "ok",
+  "summary": "completed",
+  "result": {
+    "payloads": [
+      {
+        "text": "ERROR: [bundle: executable file not found in $PATH] Please ensure that `bundle` is in your system's PATH and try running the command again.",
+        "mediaUrl": null
+      }
+    ],
+    "meta": {
+      "durationMs": 769187,
+      "agentMeta": {
+        "sessionId": "dc115d1c-08d7-4826-be53-88adb97efaaf",
+        "provider": "ollama",
+        "m...
+QA Response: ERROR: [bundle: executable file not found in $PATH] Please ensure that `bundle` is in your system's PATH and try running the command again.
+❌ FALLBACK TRIGGERED: CRITICAL SYSTEM FAILURE: ERROR: [bundle: executable file not found in $PATH] Please ensure that `bundle` is in your system's PATH and try running the command again.
+Reverting Git workspace due to failure...
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'Backlog'...
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+🔓 Locks/sessions cleared for [all]
+Failed to fetch project data.
+Terminated                 python3 -u "$DIR/mission_control.py"
+[Sat Apr  4 08:55:37 AM EDT 2026] 💤 Sleeping for 300 seconds...

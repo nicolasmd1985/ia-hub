@@ -123,3 +123,8 @@ ps aux | grep mission_control
 pkill -f mission_control.py && pkill -f run_mission_control.sh
 ```
 *(You must kill both to stop the system completely. The python process runs the logic, while the bash script runs the watchdog wrapping it. Killing only one might trigger the other to auto-restart).*
+
+Para reiniciar todo el sistema
+```bash
+bash apply_nuclear_patch.sh
+```
