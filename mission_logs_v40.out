@@ -13,3 +13,9 @@
 
 ⚠️  Lock clear warning: Error response from daemon: Container 794533e1a9b4238a0706b23fe88cb65fac3e27d831d346d525c38f2c8c6ae68f is restarting, wait until the container is running
 
+⚠️  Lock clear warning: Error response from daemon: Container 794533e1a9b4238a0706b23fe88cb65fac3e27d831d346d525c38f2c8c6ae68f is restarting, wait until the container is running
+
+🔓 Locks/sessions cleared for [all]
+⚠️  Lock clear warning: Error response from daemon: No such container: openclaw-gateway
+
+🔓 Locks/sessions cleared for [all]
