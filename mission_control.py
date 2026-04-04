@@ -777,7 +777,7 @@ def poll_and_process(env):
                 "4. CRITICAL: DO NOT PROVIDE PROGRESS UPDATES. DO NOT say 'Please wait' or 'I will now run'.\n"
                 "5. ONLY REPLY AFTER the test execution is 100% complete and you have analyzed the output.\n"
                 "6. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
-                "7. If the test fails or hits a compiler/syntax error, reply with: ERROR: [paste the exact ruby failure trace here so the Dev can fix it]\n"
+                "7. CRITICAL RULE: When a test fails, you MUST use your tools to capture the exact stdout/stderr from the terminal. Copy and paste the REAL terminal output into your response to the Backend. NEVER output placeholder text or brackets.\n"
                 "8. You MUST use your exec tool before replying. NEVER guess!"
             )
 
