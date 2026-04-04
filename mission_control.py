@@ -560,7 +560,8 @@ def poll_and_process(env):
                 "4. After writing all files, reply with a brief summary listing each file you created or modified and why.\n"
                 "5. NEVER respond with only a plan or description — only a response that includes real file writes counts as success.\n"
                 "6. When finished writing all files, also use your 'write' tool to save a file called AGENT_REPORT.md "
-                "at the root of the workspace with a markdown summary of all the changes you made."
+                "at the root of the workspace with a markdown summary of all the changes you made.\n"
+                "7. CRITICAL RULE: Before writing any code, tests, or modifying `rails_helper.rb`, you MUST use your tools to read the `Gemfile` to verify exactly which dependencies (like factory_bot_rails, simplecov, etc.) are actually installed in the project. NEVER assume a gem is installed without checking first."
             )
             
             # --- Sync Host Source Code into Container Workspace ---
