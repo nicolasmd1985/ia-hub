@@ -17,6 +17,9 @@
       "timeoutSeconds": 86450,
       "bootstrapMaxChars": 5000,
       "model": "ollama/qwen2.5:3b",
+      "embeddedPi": {
+        "timeoutMs": 86400000
+      },
       "models": {
         "ollama/qwen2.5:3b": {
           "alias": "Qwen 3B (Endurance Mode)",

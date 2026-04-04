@@ -1,14 +1,15 @@
 #!/bin/bash
-# 🛸 MISSION: BYPASS & SANE (v39) - STABILIZATION
-# Strategy: Environment variables for Ollama, clean JSON for Gateway health.
+# 🛸 MISSION: BYPASS & SANE (v40) — THE FINAL CURE
+# Strategy: 24h reasoning/embeddedPi timeout to prevent Ollama aborts.
 set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR"
 
-echo "=> 1. Generating Clean Config (v39)..."
+echo "=> 1. Generating Clean Config (v40)..."
 bash generate-config.sh
 
 echo "=> 2. REFRESHING INFRASTRUCTURE..."
+# Ensure any previous zombie containers are gone
 docker compose down
 docker compose up -d
 
@@ -23,14 +24,14 @@ for i in {1..10}; do
   sleep 5
 done
 
-echo "=> 5. Re-launching Mission Control v39..."
+echo "=> 5. Re-launching Mission Control v40..."
 pkill -f "python3.*mission_control.py" || true
 # Clean up any stale logs
-rm -f mission_logs_v39.out
-nohup python3 -u mission_control.py > mission_logs_v39.out 2>&1 &
+rm -f mission_logs_v40.out
+nohup python3 -u mission_control.py > mission_logs_v40.out 2>&1 &
 
 echo "=============================================================================="
-echo "✅ MISSION: BYPASS & SANE COMPLETE (v39)"
-echo "Strategy: Environment variables forced. Container stabilized."
+echo "✅ MISSION: BYPASS & SANE COMPLETE (v40)"
+echo "Strategy: Embedded reasoning agent (embeddedPi) timeout set to 24h."
 echo "=============================================================================="
-tail -f mission_logs_v39.out
+tail -f mission_logs_v40.out
