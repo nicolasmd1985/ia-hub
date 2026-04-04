@@ -244,7 +244,7 @@ def fetch_todo_items(env):
                 if fieldName.lower() == "status":
                     status = fieldValue
 
-        if status in ["To Do", "Todo"]:
+        if status in ["To Do", "Todo", "In Progress"]:
             items.append({
                 "id": node["id"],
                 "title": title,
@@ -507,8 +507,14 @@ def poll_and_process(env):
                 subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
                 subprocess.run(["git", "-C", project_path, "pull", "origin", "production"], capture_output=True)
                 
-                print(f"Checking out clean working branch '{cur_branch}'...")
-                subprocess.run(["git", "-C", project_path, "checkout", "-B", cur_branch], capture_output=True)
+                # Check if branch already exists locally to resume work
+                branch_check = subprocess.run(["git", "-C", project_path, "branch", "--list", cur_branch], capture_output=True, text=True)
+                if cur_branch in branch_check.stdout:
+                    print(f"Resuming on existing branch '{cur_branch}'...")
+                    subprocess.run(["git", "-C", project_path, "checkout", cur_branch], capture_output=True)
+                else:
+                    print(f"Checking out NEW working branch '{cur_branch}' from production...")
+                    subprocess.run(["git", "-C", project_path, "checkout", "-B", cur_branch], capture_output=True)
             else:
                 handle_failure(item, env, "LOCAL REPOSITORY MISSING: Cannot proceed without access to PROJECT_PATH codebase.")
                 continue
@@ -764,12 +770,13 @@ def poll_and_process(env):
                 "The backend developer has finished implementing. The following code files were modified:\n"
                 f"{changed_files_str}\n\n"
                 "Your job is to ACTUALLY RUN THE TEST SUITE to verify the code genuinely works!\n"
-                "1. Use your 'exec' tool to run this exact command: `docker exec ordenapp_web_container bundle exec rspec | tee /root/project/qa_heartbeat.log`\n"
+                "1. Use your 'exec' tool to first run `docker ps` to find the exact name of the Ruby on Rails container (it should look like 'ordenapp-web-1' or similar).\n"
+                "2. Use that exact name to run the test suite: `docker exec <EXACT_NAME> bundle exec rspec | tee /root/project/qa_heartbeat.log`\n"
                 "   (This ensures the results are saved even if the connection times out).\n"
-                "2. Wait for the test result output from your exec tool.\n"
-                "3. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
-                "4. If the test fails or hits a compiler/syntax error, reply with: ERROR: [paste the exact ruby failure trace here so the Dev can fix it]\n"
-                "5. You MUST use your exec tool before replying. NEVER guess!"
+                "3. Wait for the test result output from your exec tool.\n"
+                "4. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
+                "5. If the test fails or hits a compiler/syntax error, reply with: ERROR: [paste the exact ruby failure trace here so the Dev can fix it]\n"
+                "6. You MUST use your exec tool before replying. NEVER guess!"
             )
 
             qa_res = trigger_agent("qa", qa_prompt, timeout=3600)
@@ -803,22 +810,29 @@ def poll_and_process(env):
             print(f"QA Response: {qa_response_text}")
             
             if "SUCCESS" not in qa_response_text.upper() or "ERROR" in qa_response_text.upper():
-                print(f"❌ QA REJECTION: {qa_response_text}")
-                send_telegram(f"♻️ Task '{item['title']}' failed QA. Moving back to 'To Do' for a retry.\nReason: {qa_response_text}")
+                # Regla B: Detect Critical System/Infrastructure Failures
+                system_error_patterns = [
+                    "no such container", "docker:", "not found", "failed to execute", 
+                    "connection reset", "gateway error", "timeout", "abort", "failed to parse"
+                ]
+                is_system_error = any(p in qa_response_text.lower() for p in system_error_patterns)
                 
-                if item.get("number"):
-                    comment_on_issue(item.get("number"), f"🤖 **QA Rejected Previous Attempt:**\n\nYou must fix the errors identified below and try again:\n\n> {qa_response_text}", env)
-                
-                if not qa_res.get("aborted"):
-                    print("⚠️ [RESILIENCE] Skipping Git workspace reset due to QA rejection (preserving partial work).")
-                    # subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
-                    # subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
-                    # subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
-                    # subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
+                if is_system_error:
+                    handle_failure(item, env, f"CRITICAL SYSTEM FAILURE: {qa_response_text}")
                 else:
-                    print("QA TIMEOUT: Preserving workspace (Backend work salvaged). Moving back to To Do for retry.")
-                
-                move_task_column(item['id'], item['title'], "To Do", env)
+                    # Regla A: Return to In Progress for Code/Test errors
+                    print(f"❌ QA REJECTION (Code Error): {qa_response_text}")
+                    send_telegram(f"⚠️ QA: Tests failed for '{item['title']}'. Returning to Backend (In Progress).")
+                    
+                    if item.get("number"):
+                        comment_on_issue(item.get("number"), f"🤖 **QA Rejected (Code/Test error):**\n\nReturning to **In Progress**. Backend must fix the following errors identified during RSpec execution:\n\n> {qa_response_text}", env)
+                    
+                    if not qa_res.get("aborted"):
+                        print("⚠️ [RESILIENCE] Preserving workspace for Backend correction.")
+                    else:
+                        print("QA TIMEOUT: Preserving workspace (Backend work salvaged).")
+                    
+                    move_task_column(item['id'], item['title'], "In Progress", env)
                 continue
 
             # 5. Success Finalization
