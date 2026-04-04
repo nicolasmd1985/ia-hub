@@ -17,8 +17,8 @@
       "timeoutSeconds": 86450,
       "bootstrapMaxChars": 5000,
       "model": "ollama/qwen2.5:3b",
-      "embeddedPi": {
-        "timeoutMs": 86400000
+      "llm": {
+        "idleTimeoutSeconds": 86450
       },
       "models": {
         "ollama/qwen2.5:3b": {

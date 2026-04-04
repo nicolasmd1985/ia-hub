@@ -1,4 +1,4 @@
-# 🛸 MISSION CONTROL HEARTBEAT: Re-launched v40.
+# 🛸 MISSION CONTROL HEARTBEAT: Re-launched v42.
 import os
 import subprocess
 import json
@@ -14,7 +14,7 @@ def print(*args, **kwargs):
     builtins.print(*args, **kwargs)
 
 print("==============================================")
-print("🛸 Mission Control Script Core Initialized (v40)")
+print("🛸 Mission Control Script Core Initialized (v42)")
 print("==============================================")
 
 # ─── Load Environment ────────────────────────────────────────────────────────
