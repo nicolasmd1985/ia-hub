@@ -17,6 +17,12 @@
       "timeoutSeconds": 86450,
       "bootstrapMaxChars": 5000,
       "model": "ollama/qwen2.5:3b",
+      "providerDefaults": {
+        "ollama": {
+          "timeoutSeconds": 86450,
+          "stream": true
+        }
+      },
       "models": {
         "ollama/qwen2.5:3b": {
           "alias": "Qwen 3B (Endurance Mode)",

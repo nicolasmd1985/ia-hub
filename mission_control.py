@@ -1,4 +1,4 @@
-# 🛸 MISSION CONTROL HEARTBEAT: Re-launched v34.
+# 🛸 MISSION CONTROL HEARTBEAT: Re-launched v38.
 import os
 import subprocess
 import json
@@ -6,13 +6,15 @@ import urllib.request
 import time
 import sys
 import threading
+import builtins
 
-def print_f(*args, **kwargs):
-    print(*args, **kwargs, flush=True)
+def print(*args, **kwargs):
+    """Override print to always flush, ensuring logs are visible in real-time."""
+    kwargs.setdefault('flush', True)
+    builtins.print(*args, **kwargs)
 
-print = print_f
 print("==============================================")
-print("🛸 Mission Control Script Core Initialized")
+print("🛸 Mission Control Script Core Initialized (v36)")
 print("==============================================")
 
 # ─── Load Environment ────────────────────────────────────────────────────────
@@ -315,7 +317,7 @@ def trigger_agent(agent_id, message, timeout=86400):
     """Run an agent turn via CLI with proper timeout overrides and heartbeat monitor."""
     cmd = [
         "docker", "exec", "openclaw-gateway", 
-        "openclaw", "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", str(timeout)
+        "openclaw", "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", str(timeout), "--verbose", "on"
     ]
     print(f"Triggering [{agent_id.upper()}] via CLI (Timeout: {timeout}s)...")
     
@@ -337,7 +339,15 @@ def trigger_agent(agent_id, message, timeout=86400):
                 stdout, stderr = process.communicate()
                 if retcode == 0:
                     try:
-                        print(f"RAW AGENT OUTPUT (v34): {stdout[:500]}...")
+                        # Check for the 60s "Request timed out" payload
+                        if "Request timed out" in stdout:
+                             print(f"⚠️  [{agent_id.upper()}] CLI TIMEOUT DETECTED at {int(time.time() - start_time)}s.")
+                             print("   Wait... I see the Agent is still working on the Gateway (Heartbeat logic active).")
+                             print("   Switching to SILENT MONITOR MODE - Waiting for logs to go quiet.")
+                             # We break the CLI check loop to enter the Silence-Detection loop below
+                             break
+                        
+                        print(f"RAW AGENT OUTPUT (v37): {stdout[:500]}...")
                         start_idx = stdout.find('{')
                         if start_idx != -1:
                             parsed = json.loads(stdout[start_idx:])
@@ -379,12 +389,34 @@ def trigger_agent(agent_id, message, timeout=86400):
                 elapsed = int(current_time - start_time)
                 print(f"💓 [{agent_id.upper()}] Heartbeat: Active progress detected ({elapsed}s elapsed)")
             else:
+                # If CLI disconnected but we are still here, we wait for a persistent silence
                 quiet_duration = int(current_time - last_io_time)
                 if quiet_duration >= io_deadlock_threshold:
                     print(f"💀 DEADLOCK: Agent {agent_id} has been silent for {quiet_duration}s.")
                     process.kill()
                     restart_gateway_and_cleanup()
                     return None
+                
+        # --- SILENT MONITOR MODE (CLI died but Task is alive) ---
+        print(f"🛸 [{agent_id.upper()}] Silent Monitor Active. Waiting for activity to cease...")
+        while True:
+            time.sleep(30) # Poll every 30s
+            current_io_timestamp = get_latest_io_timestamp(agent_id)
+            if current_io_timestamp > last_io_timestamp:
+                last_io_timestamp = current_io_timestamp
+                last_io_time = time.time()
+                print(f"💓 [{agent_id.upper()}] Heartbeat (Silent): Still active...")
+            else:
+                quiet_duration = int(time.time() - last_io_time)
+                if quiet_duration >= 180: # 3 minutes of total silence after a timeout = Finished
+                    print(f"✅ [{agent_id.upper()}] Activity ceased for 3m. Assuming Agent has completed turn.")
+                    return {"response": "Silent Completion", "raw": {}, "aborted": False, "progress_detected": True}
+                
+    except Exception as e:
+        print(f"Exception triggering agent: {e}")
+        if process.poll() is None:
+            process.kill()
+        return None
 
 def handle_failure(item, env, reason):
     print(f"❌ FALLBACK TRIGGERED: {reason}")

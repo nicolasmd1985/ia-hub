@@ -1,0 +1,237 @@
+==============================================
+🛸 Mission Control Script Core Initialized (v36)
+==============================================
+==============================================
+🚀 Mission Control active.
+🔁 Entering continuous Kanban polling loop...
+==============================================
+🔓 Locks/sessions cleared for [all]
+
+=> Found 1 task(s) in 'To Do'.
+
+🚀 Processing Task: [BACKEND] Write RSpec Test Suite for Subsidiary
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Progress'...
+Checking out clean working branch 'agent-21'...
+Auto-routing to BACKEND based on title tag.
+Claiming task with BACKEND agent...
+Syncing code files into container workspace /root/.openclaw/workspaces/backend...
+Clearing stale session locks for [backend]...
+🔓 Locks/sessions cleared for [backend]
+Triggering [BACKEND] via CLI (Timeout: 3600s)...
+💓 [BACKEND] Heartbeat: Active progress detected (0s elapsed)
+💓 [BACKEND] Heartbeat: Active progress detected (60s elapsed)
+RAW AGENT OUTPUT (v34): {
+  "runId": "f9f96f4e-9c50-4906-b5ff-94f34cf98f91",
+  "status": "ok",
+  "summary": "completed",
+  "result": {
+    "payloads": [
+      {
+        "text": "Request timed out before a response was generated. Please try again, or increase `agents.defaults.timeoutSeconds` in your config.",
+        "mediaUrl": null
+      }
+    ],
+    "meta": {
+      "durationMs": 62309,
+      "agentMeta": {
+        "sessionId": "16daba63-83c4-4700-903c-415633e1c43e",
+        "provider": "ollama",
+        "model": "qwe...
+⚠️  BACKEND ABORTED but files were written. Salvaging partial work...
+Dev Agent Response: Request timed out before a response was generated. Please try again, or increase `agents.defaults.timeoutSeconds` in your config.
+Syncing modifications back from container to host...
+✅ BACKEND turn complete.
+📄 Report saved persistently on host at: /home/nicolasmd/Development/agents-developmet/ordenapp_web/agent-report/2026-04-03/agent_report.md
+✅ Code touch detected. Moving to QA verification workflow.
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Review QA'...
+Clearing stale session locks for [qa]...
+🔓 Locks/sessions cleared for [qa]
+Triggering [QA] via CLI (Timeout: 3600s)...
+💓 [QA] Heartbeat: Active progress detected (0s elapsed)
+💓 [QA] Heartbeat: Active progress detected (20s elapsed)
+💓 [QA] Heartbeat: Active progress detected (80s elapsed)
+RAW AGENT OUTPUT (v34): {
+  "runId": "fd405d59-3528-4301-a6e1-ba4fc42d43c9",
+  "status": "ok",
+  "summary": "completed",
+  "result": {
+    "payloads": [
+      {
+        "text": "Request timed out before a response was generated. Please try again, or increase `agents.defaults.timeoutSeconds` in your config.",
+        "mediaUrl": null
+      }
+    ],
+    "meta": {
+      "durationMs": 70942,
+      "agentMeta": {
+        "sessionId": "dc115d1c-08d7-4826-be53-88adb97efaaf",
+        "provider": "ollama",
+        "model": "qwe...
+⚠️ RETRY TRIGGERED: QA TIMEOUT: OpenClaw QA agent was aborted internally (durationMs=70942). No heartbeat log found. Retrying.
+Reverting Git workspace due to retry...
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'To Do'...
+🔓 Locks/sessions cleared for [all]
+
+=> Found 1 task(s) in 'To Do'.
+
+🚀 Processing Task: [BACKEND] Write RSpec Test Suite for Subsidiary
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Progress'...
+Checking out clean working branch 'agent-21'...
+Auto-routing to BACKEND based on title tag.
+Claiming task with BACKEND agent...
+Syncing code files into container workspace /root/.openclaw/workspaces/backend...
+Clearing stale session locks for [backend]...
+🔓 Locks/sessions cleared for [backend]
+Triggering [BACKEND] via CLI (Timeout: 3600s)...
+💓 [BACKEND] Heartbeat: Active progress detected (0s elapsed)
+💓 [BACKEND] Heartbeat: Active progress detected (20s elapsed)
+💓 [BACKEND] Heartbeat: Active progress detected (80s elapsed)
+RAW AGENT OUTPUT (v34): {
+  "runId": "a80fdbc7-b244-435a-a315-c97c373e191e",
+  "status": "ok",
+  "summary": "completed",
+  "result": {
+    "payloads": [
+      {
+        "text": "Request timed out before a response was generated. Please try again, or increase `agents.defaults.timeoutSeconds` in your config.",
+        "mediaUrl": null
+      }
+    ],
+    "meta": {
+      "durationMs": 70792,
+      "agentMeta": {
+        "sessionId": "16daba63-83c4-4700-903c-415633e1c43e",
+        "provider": "ollama",
+        "model": "qwe...
+⚠️  BACKEND ABORTED but files were written. Salvaging partial work...
+Dev Agent Response: Request timed out before a response was generated. Please try again, or increase `agents.defaults.timeoutSeconds` in your config.
+Syncing modifications back from container to host...
+✅ BACKEND turn complete.
+📄 Report saved persistently on host at: /home/nicolasmd/Development/agents-developmet/ordenapp_web/agent-report/2026-04-03/agent_report.md
+✅ Code touch detected. Moving to QA verification workflow.
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Review QA'...
+Clearing stale session locks for [qa]...
+🔓 Locks/sessions cleared for [qa]
+Triggering [QA] via CLI (Timeout: 3600s)...
+💓 [QA] Heartbeat: Active progress detected (0s elapsed)
+💓 [QA] Heartbeat: Active progress detected (20s elapsed)
+💓 [QA] Heartbeat: Active progress detected (80s elapsed)
+RAW AGENT OUTPUT (v34): {
+  "runId": "7008345d-af1d-4c5e-8225-ecd88e823090",
+  "status": "ok",
+  "summary": "completed",
+  "result": {
+    "payloads": [
+      {
+        "text": "Request timed out before a response was generated. Please try again, or increase `agents.defaults.timeoutSeconds` in your config.",
+        "mediaUrl": null
+      }
+    ],
+    "meta": {
+      "durationMs": 70852,
+      "agentMeta": {
+        "sessionId": "dc115d1c-08d7-4826-be53-88adb97efaaf",
+        "provider": "ollama",
+        "model": "qwe...
+⚠️ RETRY TRIGGERED: QA TIMEOUT: OpenClaw QA agent was aborted internally (durationMs=70852). No heartbeat log found. Retrying.
+Reverting Git workspace due to retry...
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'To Do'...
+🔓 Locks/sessions cleared for [all]
+
+=> Found 1 task(s) in 'To Do'.
+
+🚀 Processing Task: [BACKEND] Write RSpec Test Suite for Subsidiary
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Progress'...
+Checking out clean working branch 'agent-21'...
+Auto-routing to BACKEND based on title tag.
+Claiming task with BACKEND agent...
+Syncing code files into container workspace /root/.openclaw/workspaces/backend...
+Clearing stale session locks for [backend]...
+🔓 Locks/sessions cleared for [backend]
+Triggering [BACKEND] via CLI (Timeout: 3600s)...
+💓 [BACKEND] Heartbeat: Active progress detected (0s elapsed)
+RAW AGENT OUTPUT (v34): ...
+Dev Agent Response: 
+Syncing modifications back from container to host...
+✅ BACKEND turn complete.
+📄 Report saved persistently on host at: /home/nicolasmd/Development/agents-developmet/ordenapp_web/agent-report/2026-04-03/agent_report.md
+✅ Code touch detected. Moving to QA verification workflow.
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Review QA'...
+Clearing stale session locks for [qa]...
+🔓 Locks/sessions cleared for [qa]
+Triggering [QA] via CLI (Timeout: 3600s)...
+💓 [QA] Heartbeat: Active progress detected (0s elapsed)
+💓 [QA] Heartbeat: Active progress detected (60s elapsed)
+RAW AGENT OUTPUT (v34): {
+  "runId": "b42cfcad-add4-4f36-ade9-620ba327d1eb",
+  "status": "ok",
+  "summary": "completed",
+  "result": {
+    "payloads": [
+      {
+        "text": "Request timed out before a response was generated. Please try again, or increase `agents.defaults.timeoutSeconds` in your config.",
+        "mediaUrl": null
+      }
+    ],
+    "meta": {
+      "durationMs": 60619,
+      "agentMeta": {
+        "sessionId": "dc115d1c-08d7-4826-be53-88adb97efaaf",
+        "provider": "ollama",
+        "model": "qwe...
+⚠️ RETRY TRIGGERED: QA TIMEOUT: OpenClaw QA agent was aborted internally (durationMs=60619). No heartbeat log found. Retrying.
+Reverting Git workspace due to retry...
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'To Do'...
+🔓 Locks/sessions cleared for [all]
+
+=> Found 1 task(s) in 'To Do'.
+
+🚀 Processing Task: [BACKEND] Write RSpec Test Suite for Subsidiary
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Progress'...
+Checking out clean working branch 'agent-21'...
+Auto-routing to BACKEND based on title tag.
+Claiming task with BACKEND agent...
+Syncing code files into container workspace /root/.openclaw/workspaces/backend...
+Clearing stale session locks for [backend]...
+🔓 Locks/sessions cleared for [backend]
+Triggering [BACKEND] via CLI (Timeout: 3600s)...
+💓 [BACKEND] Heartbeat: Active progress detected (0s elapsed)
+💓 [BACKEND] Heartbeat: Active progress detected (60s elapsed)
+RAW AGENT OUTPUT (v34): {
+  "runId": "a64ec501-59da-42fd-8c97-5593503f8554",
+  "status": "ok",
+  "summary": "completed",
+  "result": {
+    "payloads": [
+      {
+        "text": "Request timed out before a response was generated. Please try again, or increase `agents.defaults.timeoutSeconds` in your config.",
+        "mediaUrl": null
+      }
+    ],
+    "meta": {
+      "durationMs": 61061,
+      "agentMeta": {
+        "sessionId": "16daba63-83c4-4700-903c-415633e1c43e",
+        "provider": "ollama",
+        "model": "qwe...
+⚠️  BACKEND ABORTED but files were written. Salvaging partial work...
+Dev Agent Response: Request timed out before a response was generated. Please try again, or increase `agents.defaults.timeoutSeconds` in your config.
+Syncing modifications back from container to host...
+✅ BACKEND turn complete.
+📄 Report saved persistently on host at: /home/nicolasmd/Development/agents-developmet/ordenapp_web/agent-report/2026-04-03/agent_report.md
+✅ Code touch detected. Moving to QA verification workflow.
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'In Review QA'...
+Clearing stale session locks for [qa]...
+🔓 Locks/sessions cleared for [qa]
+Triggering [QA] via CLI (Timeout: 3600s)...
+💓 [QA] Heartbeat: Active progress detected (0s elapsed)
+💓 [QA] Heartbeat: Active progress detected (20s elapsed)
+Error triggering qa (Code 137): Gateway agent failed; falling back to embedded: Error: gateway closed (1012): service restart
+Gateway target: ws://127.0.0.1:18789
+Source: local loopback
+Config: /root/.openclaw-config/openclaw.json
+Bind: lan
+
+⚠️ RETRY TRIGGERED: QA FAILURE: Agent returned None (process error).
+Reverting Git workspace due to retry...
+Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'To Do'...

@@ -1,14 +1,15 @@
 #!/bin/bash
-# 🛸 MISSION: BYPASS & SANE (v33)
-# Strategy: Direct HTTP API calls and cleaned JSON schema.
+# 🛸 MISSION: BYPASS & SANE (v38) - THE OLLAMA CURE
+# Strategy: Injecting provider-level timeouts to prevent Ollama aborts.
 set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR"
 
-echo "=> 1. Generating Clean Config (v33)..."
+echo "=> 1. Generating Clean Config (v38)..."
 bash generate-config.sh
 
 echo "=> 2. REFRESHING INFRASTRUCTURE..."
+# Clean state to ensure fresh config load
 docker compose down
 docker compose up -d
 
@@ -23,14 +24,14 @@ for i in {1..10}; do
   sleep 5
 done
 
-echo "=> 5. Re-launching Mission Control v34..."
+echo "=> 5. Re-launching Mission Control v38..."
 pkill -f "python3.*mission_control.py" || true
 # Clean up any stale logs
-rm -f mission_logs_v34.out
-nohup python3 -u mission_control.py > mission_logs_v34.out 2>&1 &
+rm -f mission_logs_v38.out
+nohup python3 -u mission_control.py > mission_logs_v38.out 2>&1 &
 
 echo "=============================================================================="
-echo "✅ MISSION: BYPASS & SANE COMPLETE (v34)"
-echo "Strategy: Terminal CLI restored with --timeout. Logging unbuffered."
+echo "✅ MISSION: BYPASS & SANE COMPLETE (v38)"
+echo "Strategy: Massive timeouts injected at Gateway, Provider and CLI levels."
 echo "=============================================================================="
-tail -f mission_logs_v34.out
+tail -f mission_logs_v38.out
