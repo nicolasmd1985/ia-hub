@@ -126,5 +126,5 @@ pkill -f mission_control.py && pkill -f run_mission_control.sh
 
 Para reiniciar todo el sistema
 ```bash
-bash apply_nuclear_patch.sh
+sh apply_nuclear_patch.sh
 ```

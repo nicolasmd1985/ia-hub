@@ -774,10 +774,11 @@ def poll_and_process(env):
                 "2. If the container found is not running, or no container is found, report it clearly.\n"
                 "3. Use that exact name to run the test suite with a login shell: `docker exec <EXACT_NAME> /bin/bash -l -c \"bundle exec rspec | tee /root/project/qa_heartbeat.log\"`\n"
                 "   (Using /bin/bash -l -c ensures that the Ruby environment and 'bundle' are correctly loaded into the PATH).\n"
-                "4. Wait for the test result output from your exec tool.\n"
-                "5. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
-                "6. If the test fails or hits a compiler/syntax error, reply with: ERROR: [paste the exact ruby failure trace here so the Dev can fix it]\n"
-                "7. You MUST use your exec tool before replying. NEVER guess!"
+                "4. CRITICAL: DO NOT PROVIDE PROGRESS UPDATES. DO NOT say 'Please wait' or 'I will now run'.\n"
+                "5. ONLY REPLY AFTER the test execution is 100% complete and you have analyzed the output.\n"
+                "6. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
+                "7. If the test fails or hits a compiler/syntax error, reply with: ERROR: [paste the exact ruby failure trace here so the Dev can fix it]\n"
+                "8. You MUST use your exec tool before replying. NEVER guess!"
             )
 
             qa_res = trigger_agent("qa", qa_prompt, timeout=3600)
