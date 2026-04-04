@@ -86,3 +86,17 @@ QA Response: Silent Completion
 ❌ QA REJECTION: Silent Completion
 ⚠️ [RESILIENCE] Skipping Git workspace reset due to QA rejection (preserving partial work).
 Moving card '[BACKEND] Write RSpec Test Suite for Subsidiary' to 'To Do'...
+⚠️  Lock clear warning: Error response from daemon: No such container: openclaw-gateway
+
+⚠️  Lock clear warning: Error response from daemon: No such container: openclaw-gateway
+
+⚠️  Lock clear warning: Error response from daemon: No such container: openclaw-gateway
+
+🔓 Locks/sessions cleared for [all]
+🔓 Locks/sessions cleared for [all]
+⚠️  Lock clear warning: Error response from daemon: Container 2f3b57b9e7c9ecc94cb357c3ca3407d8f378af5b999284e5f7d31c0604277d69 is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container 2f3b57b9e7c9ecc94cb357c3ca3407d8f378af5b999284e5f7d31c0604277d69 is restarting, wait until the container is running
+
+⚠️  Lock clear warning: Error response from daemon: Container 2f3b57b9e7c9ecc94cb357c3ca3407d8f378af5b999284e5f7d31c0604277d69 is restarting, wait until the container is running
+
