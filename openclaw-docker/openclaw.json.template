@@ -22,7 +22,7 @@
       },
       "models": {
         "ollama/gemma2:9b": {
-          "alias": "Gemma 2 9B",
+          "alias": "Gemma 2 9B (Optimized Context)",
           "streaming": true
         }
       }
@@ -94,12 +94,12 @@
         "models": [
           {
             "id": "gemma2:9b",
-            "name": "Gemma 2 9B",
+            "name": "Gemma 2 9B (Optimized Context)",
             "reasoning": false,
             "input": ["text"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-            "contextWindow": 8192,
-            "maxTokens": 4096
+            "contextWindow": 4096,
+            "maxTokens": 1024
           },
           {
             "id": "qwen2.5:1.5b",
