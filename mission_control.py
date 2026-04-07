@@ -14,8 +14,10 @@ def print(*args, **kwargs):
     builtins.print(*args, **kwargs)
 
 print("==============================================")
-print("🛸 Mission Control Script Core Initialized (v42)")
 print("==============================================")
+
+# ─── Global State ────────────────────────────────────────────────────────────
+RECOVERY_ATTEMPTS = {}
 
 # ─── Load Environment ────────────────────────────────────────────────────────
 def load_env():
@@ -834,7 +836,24 @@ def poll_and_process(env):
                 is_system_error = any(p in qa_response_text.lower() for p in system_error_patterns)
                 
                 if is_system_error:
-                    handle_failure(item, env, f"CRITICAL SYSTEM FAILURE: {qa_response_text}")
+                    # IMPLEMENTATION: Anti-Loop Recovery Recipes
+                    task_id = item.get('id', 'unknown')
+                    attempts = RECOVERY_ATTEMPTS.get(task_id, 0)
+                    
+                    if attempts < 1:
+                        print(f"🛠️  [RECOVERY RECIPE] Infrastructure failure detected (Attempt {attempts + 1}/1). Executing auto-recovery (docker compose up -d)...")
+                        RECOVERY_ATTEMPTS[task_id] = attempts + 1
+                        
+                        # Recipe: Spin up the container in development mode
+                        recovery_env = os.environ.copy()
+                        recovery_env["ENV"] = "development"
+                        subprocess.run(["docker", "compose", "up", "-d"], cwd=project_path, env=recovery_env, capture_output=True)
+                        
+                        handle_retry(item, env, "QA INFRASTRUCTURE RECOVERY: Auto-started missing Docker container. Retrying.", cur_branch)
+                        continue
+                    else:
+                        print("❌ [RECOVERY FAILED] Max attempts reached. Escalating to Human.")
+                        handle_failure(item, env, f"CRITICAL SYSTEM FAILURE (Persistent after recovery): {qa_response_text}")
                 else:
                     # Regla A: Return to In Progress for Code/Test errors
                     print(f"❌ QA REJECTION (Code Error): {qa_response_text}")
