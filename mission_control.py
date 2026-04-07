@@ -561,7 +561,8 @@ def poll_and_process(env):
                 "5. NEVER respond with only a plan or description — only a response that includes real file writes counts as success.\n"
                 "6. When finished writing all files, also use your 'write' tool to save a file called AGENT_REPORT.md "
                 "at the root of the workspace with a markdown summary of all the changes you made.\n"
-                "7. CRITICAL RULE: Before writing any code, tests, or modifying `rails_helper.rb`, you MUST use your tools to read the `Gemfile` to verify exactly which dependencies (like factory_bot_rails, simplecov, etc.) are actually installed in the project. NEVER assume a gem is installed without checking first."
+                "7. CRITICAL RULE: Before writing any code, tests, or modifying `rails_helper.rb`, you MUST use your tools to read the `Gemfile` to verify exactly which dependencies (like factory_bot_rails, simplecov, etc.) are actually installed in the project. NEVER assume a gem is installed without checking first.\n"
+                "8. CRITICAL RULE: When assigned a TESTING task, you are FORBIDDEN from modifying any file inside the `app/` directory. You must ONLY write files in the `spec/` directory. NEVER leak your internal workspace files, logs, or agent reports into the git repository. Your commits must ONLY contain the actual code/tests."
             )
             
             # --- Sync Host Source Code into Container Workspace ---
@@ -753,6 +754,16 @@ def poll_and_process(env):
             # 4. Trigger QA turn
             print("Clearing stale session locks for [qa]...")
             safe_clear_locks("qa")
+            
+            print("🔄 Hot-swapping Backend Agent changes into the QA Testing container...")
+            ruby_container = "ordenapp_web_container"
+            sync_dirs = ["app", "spec", "db", "config", "Gemfile", "Gemfile.lock"]
+            for d in sync_dirs:
+                src_path = os.path.join(project_path, d)
+                if os.path.exists(src_path):
+                    # Copies the host folder/file into /app/ in the container
+                    subprocess.run(["docker", "cp", src_path, f"{ruby_container}:/app/"], capture_output=True)
+            
             # Clear stale QA log to prevent false successes from previous turns
             qa_log_path = os.path.join(project_path, "qa_heartbeat.log")
             if os.path.exists(qa_log_path): os.remove(qa_log_path)
@@ -771,15 +782,17 @@ def poll_and_process(env):
                 "The backend developer has finished implementing. The following code files were modified:\n"
                 f"{changed_files_str}\n\n"
                 "Your job is to ACTUALLY RUN THE TEST SUITE to verify the code genuinely works!\n"
-                "1. Use your 'exec' tool to first run `docker ps` to find the exact name of the Ruby on Rails container (it should look like 'ordenapp-web-1' or similar).\n"
-                "2. If the container found is not running, or no container is found, report it clearly.\n"
-                "3. Use that exact name to run the test suite with a login shell: `docker exec <EXACT_NAME> /bin/bash -l -c \"bundle exec rspec | tee /root/project/qa_heartbeat.log\"`\n"
-                "   (Using /bin/bash -l -c ensures that the Ruby environment and 'bundle' are correctly loaded into the PATH).\n"
-                "4. CRITICAL: DO NOT PROVIDE PROGRESS UPDATES. DO NOT say 'Please wait' or 'I will now run'.\n"
-                "5. ONLY REPLY AFTER the test execution is 100% complete and you have analyzed the output.\n"
-                "6. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
-                "7. CRITICAL RULE: When a test fails, you MUST use your tools to capture the exact stdout/stderr from the terminal. Copy and paste the REAL terminal output into your response to the Backend. NEVER output placeholder text or brackets.\n"
-                "8. You MUST use your exec tool before replying. NEVER guess!"
+                "1. A Docker container named 'ordenapp_web_container' is already running the Rails app.\n"
+                "2. You MUST use your 'exec' tool to run the test suite EXACTLY like this:\n"
+                "   `bash -c \"docker exec ordenapp_web_container bash -l -c 'bundle exec rspec' | tee /root/project/qa_heartbeat.log\"`\n"
+                "   (NOTE: The `tee` ensures the log is saved to the gateway, and the tests run in the Rails container).\n"
+                "3. CRITICAL: DO NOT PROVIDE PROGRESS UPDATES. DO NOT say 'Please wait' or 'I will now run'.\n"
+                "4. ONLY REPLY AFTER the test execution is 100% complete and you have analyzed the output.\n"
+                "5. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
+                "6. CRITICAL RULE: When a test fails, you MUST use your tools to capture the exact stdout/stderr from the terminal. Copy and paste the REAL terminal output into your response to the Backend. NEVER output placeholder text or brackets.\n"
+                "7. You MUST use your exec tool before replying. NEVER guess!\n"
+                "8. CRITICAL RULE: You are the gatekeeper. You MUST run the RSpec test suite. If the tests FAIL, throw errors, or do not pass 100%, you are FORBIDDEN from moving the card to Pull Request. You MUST reject the task, move it back to 'In Progress', and send the EXACT terminal output of the failure to the Backend agent so they can fix it. Repeat this loop until tests pass.\n"
+                "9. CRITICAL INFRASTRUCTURE RULE: If the terminal output contains errors like 'No such container', 'docker: Error response', or 'command not found', YOU MUST NOT analyze the Ruby code. Reject the task immediately and output EXACTLY this text: 'CRITICAL INFRASTRUCTURE ERROR: The Docker container is not running or the test command failed to execute. Please start the container first.'"
             )
 
             qa_res = trigger_agent("qa", qa_prompt, timeout=3600)

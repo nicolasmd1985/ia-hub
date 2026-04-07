@@ -15,14 +15,14 @@
   "agents": {
     "defaults": {
       "timeoutSeconds": 86450,
-      "bootstrapMaxChars": 5000,
-      "model": "ollama/qwen2.5:3b",
+      "bootstrapMaxChars": 12000,
+      "model": "ollama/gemma2:9b",
       "llm": {
         "idleTimeoutSeconds": 86450
       },
       "models": {
-        "ollama/qwen2.5:3b": {
-          "alias": "Qwen 3B (Endurance Mode)",
+        "ollama/gemma2:9b": {
+          "alias": "Gemma 2 9B",
           "streaming": true
         }
       }
@@ -33,7 +33,7 @@
         "default": true,
         "name": "Architect",
         "workspace": "/root/.openclaw/workspaces/architect",
-        "model": "ollama/qwen2.5:3b",
+        "model": "ollama/gemma2:9b",
         "identity": { "name": "Architect", "emoji": "🏗️", "theme": "task routing orchestrator" },
         "tools": { "profile": "minimal" }
       },
@@ -41,7 +41,7 @@
         "id": "backend",
         "name": "Backend Developer",
         "workspace": "/root/.openclaw/workspaces/backend",
-        "model": "ollama/qwen2.5:3b",
+        "model": "ollama/gemma2:9b",
         "identity": { "name": "Backend", "emoji": "⚙️", "theme": "Ruby on Rails backend specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
       },
@@ -49,7 +49,7 @@
         "id": "frontend",
         "name": "Frontend Developer",
         "workspace": "/root/.openclaw/workspaces/frontend",
-        "model": "ollama/qwen2.5:3b",
+        "model": "ollama/gemma2:9b",
         "identity": { "name": "Frontend", "emoji": "🎨", "theme": "Hotwire and Turbo frontend specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
       },
@@ -57,7 +57,7 @@
         "id": "analyst",
         "name": "Analyst",
         "workspace": "/root/.openclaw/workspaces/analyst",
-        "model": "ollama/qwen2.5:3b",
+        "model": "ollama/gemma2:9b",
         "identity": { "name": "Analyst", "emoji": "🔍", "theme": "software architecture analyst" },
         "tools": { "profile": "minimal" }
       },
@@ -65,7 +65,7 @@
         "id": "qa",
         "name": "QA Engineer",
         "workspace": "/root/.openclaw/workspaces/qa",
-        "model": "ollama/qwen2.5:3b",
+        "model": "ollama/gemma2:9b",
         "identity": { "name": "QA", "emoji": "🧪", "theme": "Quality assurance and testing specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
       }
@@ -93,13 +93,13 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen2.5:3b",
-            "name": "Qwen2.5 3B (Host-Direct)",
+            "id": "gemma2:9b",
+            "name": "Gemma 2 9B",
             "reasoning": false,
             "input": ["text"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-            "contextWindow": 16384,
-            "maxTokens": 8192
+            "contextWindow": 8192,
+            "maxTokens": 4096
           },
           {
             "id": "qwen2.5:1.5b",
