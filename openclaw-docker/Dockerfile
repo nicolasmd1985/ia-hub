@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     bash \
     git \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Install modern Docker CLI (static binary) to avoid API version mismatch

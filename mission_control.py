@@ -7,6 +7,8 @@ import time
 import sys
 import threading
 import builtins
+import sqlite3
+import fcntl
 
 def print(*args, **kwargs):
     """Override print to always flush, ensuring logs are visible in real-time."""
@@ -16,13 +18,331 @@ def print(*args, **kwargs):
 print("==============================================")
 print("==============================================")
 
-# ─── Global State ────────────────────────────────────────────────────────────
-RECOVERY_ATTEMPTS = {}
+# ─── Global State (SQLite) ───────────────────────────────────────────────────
+STATE_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mission_state.db")
+
+def ensure_tables():
+    """Ensure all required SQLite tables exist. Called before processing to prevent 'no such table' errors."""
+    conn = sqlite3.connect(STATE_DB)
+    conn.execute('''CREATE TABLE IF NOT EXISTS state 
+                    (task_id TEXT, counter_type TEXT, attempts INTEGER, 
+                     PRIMARY KEY(task_id, counter_type))''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS qa_cycles
+                    (task_id TEXT, cycle_num INTEGER,
+                     total_examples INTEGER, failures INTEGER, errors INTEGER,
+                     error_score INTEGER, pass_rate REAL,
+                     timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+                     PRIMARY KEY(task_id, cycle_num))''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS feedback 
+                    (task_id TEXT PRIMARY KEY, content TEXT)''')
+    conn.commit()
+    conn.close()
+
+ensure_tables()
+
+def get_state_counter(task_id, counter_type):
+    conn = sqlite3.connect(STATE_DB)
+    row = conn.execute("SELECT attempts FROM state WHERE task_id=? AND counter_type=?", (str(task_id), counter_type)).fetchone()
+    conn.close()
+    return row[0] if row else 0
+
+def increment_state_counter(task_id, counter_type):
+    conn = sqlite3.connect(STATE_DB)
+    conn.execute('''INSERT INTO state(task_id, counter_type, attempts) 
+                    VALUES(?,?,1) 
+                    ON CONFLICT(task_id, counter_type) DO UPDATE SET attempts=attempts+1''',
+                 (str(task_id), counter_type))
+    conn.commit()
+    conn.close()
+    return get_state_counter(task_id, counter_type)
+
+MAX_HALLUCINATION_RETRIES = 3
+MAX_QA_HARD_CEILING = 8  # Absolute maximum QA↔Backend cycles (safety net)
+
+# ─── Convergence Tracking DB ─────────────────────────────────────────────────
+
+def record_qa_cycle(task_id, total_examples, failures, errors):
+    """Record QA cycle metrics and return the current cycle number."""
+    conn = sqlite3.connect(STATE_DB)
+    row = conn.execute("SELECT MAX(cycle_num) FROM qa_cycles WHERE task_id=?", (str(task_id),)).fetchone()
+    cycle_num = (row[0] or 0) + 1
+    error_score = failures + errors
+    pass_rate = ((total_examples - failures) / total_examples) if total_examples > 0 else 0.0
+    conn.execute(
+        "INSERT INTO qa_cycles(task_id, cycle_num, total_examples, failures, errors, error_score, pass_rate) VALUES(?,?,?,?,?,?,?)",
+        (str(task_id), cycle_num, total_examples, failures, errors, error_score, pass_rate)
+    )
+    conn.commit()
+    conn.close()
+    return cycle_num
+
+def evaluate_convergence(task_id):
+    """Analyze QA cycle trend using monotone convergence (early stopping).
+    
+    Algorithm:
+    - Track error_score (failures + errors) over cycles
+    - If decreasing → IMPROVING → continue
+    - If stagnant for 2+ cycles → STAGNANT → stop
+    - If increasing → REGRESSING → stop
+    - Hard ceiling at MAX_QA_HARD_CEILING (safety net)
+    
+    Returns (should_continue: bool, reason: str, cycle_num: int, metrics: dict)
+    """
+    conn = sqlite3.connect(STATE_DB)
+    rows = conn.execute(
+        "SELECT cycle_num, error_score, pass_rate, total_examples, failures FROM qa_cycles WHERE task_id=? ORDER BY cycle_num",
+        (str(task_id),)
+    ).fetchall()
+    conn.close()
+    
+    if not rows:
+        return True, "First cycle", 0, {}
+    
+    cycle_num = rows[-1][0]
+    latest_score = rows[-1][1]
+    latest_rate = rows[-1][2]
+    latest_examples = rows[-1][3]
+    latest_failures = rows[-1][4]
+    
+    metrics = {
+        'cycle': cycle_num,
+        'error_score': latest_score,
+        'pass_rate': latest_rate,
+        'total_examples': latest_examples,
+        'failures': latest_failures,
+        'trend': [r[1] for r in rows]
+    }
+    
+    # SUCCESS: All tests pass
+    if latest_score == 0 and latest_examples > 0:
+        return False, "ALL_TESTS_PASS", cycle_num, metrics
+    
+    # HARD CEILING
+    if cycle_num >= MAX_QA_HARD_CEILING:
+        return False, f"HARD_CEILING ({MAX_QA_HARD_CEILING} cycles)", cycle_num, metrics
+    
+    # Need at least 2 data points for trend analysis
+    if len(rows) < 2:
+        return True, f"FIRST_DATAPOINT (error_score={latest_score})", cycle_num, metrics
+    
+    # Calculate deltas
+    scores = [r[1] for r in rows]
+    delta = scores[-1] - scores[-2]
+    
+    if delta < 0:
+        improvement = scores[-2] - scores[-1]
+        return True, f"IMPROVING (Δ=-{improvement}, error_score: {scores[-2]}→{scores[-1]})", cycle_num, metrics
+    
+    if delta > 0:
+        regression = scores[-1] - scores[-2]
+        return False, f"REGRESSING (Δ=+{regression}, error_score: {scores[-2]}→{scores[-1]})", cycle_num, metrics
+    
+    # delta == 0 → stagnation
+    stagnant_count = 0
+    for i in range(len(scores) - 1, 0, -1):
+        if scores[i] == scores[i-1]:
+            stagnant_count += 1
+        else:
+            break
+    
+    if stagnant_count >= 2:
+        return False, f"STAGNANT ({stagnant_count} cycles at error_score={latest_score})", cycle_num, metrics
+    
+    return True, f"MONITORING (stagnant {stagnant_count} cycle(s), error_score={latest_score})", cycle_num, metrics
+
+def save_feedback(task_id, feedback):
+    conn = sqlite3.connect(STATE_DB)
+    conn.execute('''INSERT INTO feedback(task_id, content) VALUES(?,?) 
+                    ON CONFLICT(task_id) DO UPDATE SET content=excluded.content''', (str(task_id), feedback))
+    conn.commit()
+    conn.close()
+
+def get_feedback(task_id):
+    conn = sqlite3.connect(STATE_DB)
+    try:
+        row = conn.execute("SELECT content FROM feedback WHERE task_id=?", (str(task_id),)).fetchone()
+        return row[0] if row else ""
+    except sqlite3.OperationalError:
+        return ""
+    finally:
+        conn.close()
+
+def clear_feedback(task_id):
+    conn = sqlite3.connect(STATE_DB)
+    try:
+        conn.execute("DELETE FROM feedback WHERE task_id=?", (str(task_id),))
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    finally:
+        conn.close()
+
+# ─── RSpec Output Parser ─────────────────────────────────────────────────────
+import re as _re
+
+def parse_rspec_result(output_text):
+    """Parse RSpec output to extract pass/fail status and counts."""
+    result = {
+        'passed': False, 'examples': 0, 'failures': 0, 'errors': 0,
+        'raw_summary': '', 'has_evidence': False
+    }
+    
+    summary_match = _re.search(r'(\d+)\s+examples?,\s+(\d+)\s+failures?', output_text)
+    if summary_match:
+        result['examples'] = int(summary_match.group(1))
+        result['failures'] = int(summary_match.group(2))
+        result['raw_summary'] = summary_match.group(0)
+        result['has_evidence'] = True
+        result['passed'] = result['failures'] == 0 and result['examples'] > 0
+    
+    error_match = _re.search(r'(\d+)\s+errors?\s+occurred', output_text)
+    if error_match:
+        result['errors'] = int(error_match.group(1))
+        result['has_evidence'] = True
+        result['passed'] = False
+    
+    return result
+
+def extract_schema_for_model(project_path, model_name):
+    """Extract the CREATE TABLE definition from db/schema.rb for a given model."""
+    schema_path = os.path.join(project_path, "db", "schema.rb")
+    if not os.path.exists(schema_path):
+        return ""
+    with open(schema_path, 'r') as f:
+        content = f.read()
+    # CamelCase → snake_case pluralized
+    table_name = _re.sub(r'(?<!^)(?=[A-Z])', '_', model_name).lower() + 's'
+    pattern = rf'(create_table "{table_name}".*?end)'
+    match = _re.search(pattern, content, _re.DOTALL)
+    return match.group(1) if match else ""
+
+def build_targeted_feedback(qa_output, rspec_result):
+    """Build structured, actionable feedback for the Backend agent from QA failures."""
+    feedback = "\n\n## ❌ QA TEST RESULTS — YOUR CODE HAS BUGS\n"
+    feedback += f"**Results:** {rspec_result['examples']} tests, {rspec_result['failures']} failures, {rspec_result['errors']} errors\n\n"
+    
+    # Wrong column names (most common 3B mistake)
+    no_method_matches = _re.findall(r"undefined method [`'](\w+)='", qa_output)
+    if no_method_matches:
+        feedback += "### ❌ Wrong Column Names\n"
+        feedback += "These attributes DO NOT EXIST. Check db/schema.rb for correct names:\n"
+        for method in sorted(set(no_method_matches)):
+            feedback += f"- `{method}` does not exist\n"
+        feedback += "\n"
+    
+    # Missing constants
+    name_errors = _re.findall(r"NameError:\s+uninitialized constant (.+?)$", qa_output, _re.MULTILINE)
+    if name_errors:
+        feedback += "### ❌ Missing Classes/Modules\n"
+        for name in sorted(set(name_errors)):
+            feedback += f"- `{name.strip()}` does not exist\n"
+        feedback += "-> ⚠️ You MUST CREATE the file that defines this constant (e.g., app/models/... or app/graphql/mutations/...).\n"
+        feedback += "-> DO NOT just rewrite the spec file. Write the actual implementation file.\n\n"
+        
+    # Load Errors (syntax or uninitialized constants in describe blocks)
+    load_errors = _re.findall(r"An error occurred while loading (.+?)\.\nFailure/Error:(.+?)(?=\n\n|\Z)", qa_output, _re.DOTALL)
+    if load_errors:
+        feedback += "### ❌ File Load Errors (Syntax or Missing Constants)\n"
+        for file_path, error_details in load_errors[:3]:
+            feedback += f"**File:** `{file_path}` failed to load.\n"
+            feedback += f"```ruby\n{error_details.strip()[:500]}\n```\n"
+            if "NameError" in error_details or "uninitialized constant" in error_details:
+                feedback += "-> ⚠️ This usually means you need to create the class/module in `app/` before the spec can load it.\n"
+        feedback += "\n"
+    
+    # Individual failures (max 3 to fit context window)
+    failure_descs = _re.findall(r'\d+\)\s+(.+?)\n\s+Failure/Error:', qa_output, _re.DOTALL)
+    if failure_descs:
+        feedback += "### Failing Tests\n"
+        for i, desc in enumerate(failure_descs[:3]):
+            feedback += f"{i+1}. {desc.strip()}\n"
+        feedback += "\n"
+    
+    feedback += "Fix ALL errors. Use ONLY column names from the schema provided above.\n"
+    return feedback
+
+def run_rspec_directly(project_path, spec_files, container_name):
+    """Fallback: Run RSpec directly from the orchestrator, bypassing QA agent."""
+    cmd = ["docker", "exec", container_name, "bundle", "exec", "rspec"] + spec_files
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        return result.stdout + "\n" + result.stderr
+    except subprocess.TimeoutExpired:
+        return "TIMEOUT: RSpec execution exceeded 300 seconds"
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+
+def load_project_config(project_path):
+    """Load project-specific agent configuration from .openclaw/config.json."""
+    config_path = os.path.join(project_path, ".openclaw", "config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"⚠️ Error loading project config: {e}")
+    return {}
+
+def rescue_hallucinated_writes(response_text, container_ws):
+    """Safety net: Parse write tool calls or markdown blocks from agent TEXT response.
+    Small models (3B) often fallback to markdown when tools fail.
+    This rescues both JSON-like tool strings and markdown code blocks."""
+    import re
+    rescued = 0
+    
+    # ── PATTERN 1: JSON-like strings ──────────────────────────────────────────
+    json_pattern = r'"name"\s*:\s*"write"[^}]*?"(?:path|filePath|file)"\s*:\s*"([^"]+)"[^}]*?"content"\s*:\s*"((?:[^"\\]|\\.)*)"'
+    for match in re.finditer(json_pattern, response_text, re.DOTALL):
+        file_path, content = match.group(1), match.group(2)
+        content = content.replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"').replace('\\\\', '\\')
+        rescued += write_rescued_file(file_path, content, container_ws)
+        
+    # ── PATTERN 2: Markdown headers + Ruby blocks ─────────────────────────────
+    # Matches "### spec/path/file.rb" or "File: spec/..." followed by ```ruby...```
+    md_pattern = r'(?:###\s*|File:\s*|Path:\s*|`)([\w\/\.\-]+\.(?:rb|yml|json|md))[`\s]*\n\s*```(?:ruby|yaml|json|markdown|)\n(.*?)\n\s*```'
+    for match in re.finditer(md_pattern, response_text, re.DOTALL):
+        file_path, content = match.group(1), match.group(2)
+        if 'AGENT_REPORT' not in file_path.upper():
+            rescued += write_rescued_file(file_path, content, container_ws)
+    
+    return rescued
+
+def write_rescued_file(file_path, content, container_ws):
+    """Helper to write a rescued file to the container."""
+    # Normalize path
+    if '/workspaces/' in file_path:
+        parts = file_path.split('/workspaces/')
+        if len(parts) > 1:
+            subpath = parts[1]
+            file_path = subpath.split('/', 1)[1] if '/' in subpath else subpath
+    elif file_path.startswith('/root/'):
+        file_path = file_path.split('/')[-1] if '/' in file_path else file_path
+    
+    # Skip report files and non-code files
+    if any(kw in file_path.upper() for kw in ('AGENT_REPORT', 'SYSTEM.MD', 'DOCKER-COMPOSE')):
+        return 0
+    if not any(file_path.endswith(ext) for ext in ('.rb', '.yml', '.json', '.js', '.ts')):
+        return 0
+        
+    full_path = f"{container_ws}/{file_path}"
+    dir_path = os.path.dirname(full_path)
+    
+    subprocess.run(["docker", "exec", "openclaw-gateway", "mkdir", "-p", dir_path], capture_output=True)
+    write_result = subprocess.run(
+        ["docker", "exec", "-i", "openclaw-gateway", "bash", "-c", f"cat > '{full_path}'"],
+        input=content, capture_output=True, text=True
+    )
+    
+    if write_result.returncode == 0:
+        print(f"🔧 [RESCUE] Successfully recovered: {file_path}")
+        return 1
+    return 0
 
 # ─── Load Environment ────────────────────────────────────────────────────────
 def load_env():
     env = {}
-    env_file = "/home/nicolasmd/Development/agents-developmet/ai-hub/.env"
+    AI_HUB_DIR = os.path.dirname(os.path.abspath(__file__))
+    env_file = os.path.join(AI_HUB_DIR, ".env")
     if os.path.exists(env_file):
         with open(env_file, 'r') as f:
             for line in f:
@@ -74,16 +394,16 @@ def send_telegram(message):
 
 # ─── GitHub Project State Manager ──────────────────────────────────────────
 def move_task_column(item_id, item_title, status_name, env):
-    project_id = "PVT_kwHOATWBuM4BQ0Pm"
-    field_id = "PVTSSF_lAHOATWBuM4BQ0Pmzg-0748"
+    project_id = env.get("PROJECT_BOARD_ID", "PVT_kwHOATWBuM4BQ0Pm")
+    field_id = env.get("PROJECT_STATUS_FIELD_ID", "PVTSSF_lAHOATWBuM4BQ0Pmzg-0748")
     
     options = {
-        "Backlog": "53cd9920",
-        "To Do": "f75ad846",
-        "In Progress": "47fc9ee4",
-        "In Review QA": "0004c560",
-        "Pull request Review": "d121c55f",
-        "Done": "98236657"
+        "Backlog": env.get("PROJECT_OPTION_BACKLOG", "53cd9920"),
+        "To Do": env.get("PROJECT_OPTION_TODO", "f75ad846"),
+        "In Progress": env.get("PROJECT_OPTION_IN_PROGRESS", "47fc9ee4"),
+        "In Review QA": env.get("PROJECT_OPTION_IN_REVIEW", "0004c560"),
+        "Pull request Review": env.get("PROJECT_OPTION_PR_REVIEW", "d121c55f"),
+        "Done": env.get("PROJECT_OPTION_DONE", "98236657")
     }
     
     option_id = options.get(status_name)
@@ -252,13 +572,52 @@ def fetch_todo_items(env):
                 "title": title,
                 "body": body,
                 "url": content.get("url"),
-                "number": content.get("number")
+                "number": content.get("number"),
+                "status": status
             })
 
     return items
 
-# ─── Agent Actions & Fallback System ─────────────────────────────────────────
-def safe_clear_locks(agent_id=None):
+# ─── Container Environment Toggle ─────────────────────────────────────────
+def ensure_dev_container(project_path):
+    """Ensure the project container is running in development mode with host volume mount.
+    Creates a docker-compose.override.yml to add '- .:/app' without modifying the production
+    docker-compose.yml."""
+    config = load_project_config(project_path)
+    ruby_container = config.get("container_name", "ordenapp_web_container")
+    override_path = os.path.join(project_path, "docker-compose.override.yml")
+    
+    # Create override file for dev volume mount (if not already present)
+    if not os.path.exists(override_path):
+        with open(override_path, 'w') as f:
+            f.write("version: '3'\nservices:\n  web:\n    volumes:\n      - .:/app\n")
+        print("📝 Created docker-compose.override.yml with dev volume mount.")
+    
+    # Restart container in development mode  
+    print("🔄 Restarting container in development mode with volume mount...")
+    dev_env = os.environ.copy()
+    dev_env["ENV"] = "development"
+    subprocess.run(["docker", "compose", "up", "-d", "--no-deps", "web"], cwd=project_path, env=dev_env, capture_output=True)
+    time.sleep(10)
+    print(f"✅ {ruby_container} ready in development mode.")
+
+def restore_production_container(project_path):
+    """Restore the container to production mode by removing the override and restarting."""
+    override_path = os.path.join(project_path, "docker-compose.override.yml")
+    if os.path.exists(override_path):
+        try:
+            os.remove(override_path)
+            print("🗑️ Removed docker-compose.override.yml.")
+        except Exception as e:
+            print(f"⚠️ Error removing override: {e}")
+    
+    print("🔄 Restarting container in production mode...")
+    subprocess.run(["docker", "compose", "up", "-d", "--no-deps", "web"], cwd=project_path, capture_output=True)
+    time.sleep(5)
+    print("✅ Container restored to production mode.")
+
+
+def safe_clear_locks(agent_id=None, silent=False):
     """Clear OpenClaw session locks safely with a strict timeout."""
     try:
         if agent_id:
@@ -275,8 +634,9 @@ def safe_clear_locks(agent_id=None):
                    "echo done"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         if result.returncode == 0:
-            label = f"[{agent_id}]" if agent_id else "[all]"
-            print(f"🔓 Locks/sessions cleared for {label}")
+            if not silent:
+                label = f"[{agent_id}]" if agent_id else "[all]"
+                print(f"🔓 Locks/sessions cleared for {label}")
         else:
             print(f"⚠️  Lock clear warning: {result.stderr[:200]}")
     except subprocess.TimeoutExpired:
@@ -317,9 +677,22 @@ def get_latest_io_timestamp(agent_id):
 
 def trigger_agent(agent_id, message, timeout=86400):
     """Run an agent turn via CLI with proper timeout overrides and heartbeat monitor."""
+    # --- Deep Clean Agent Workspace (Maximize 3B Reasoning) ---
+    print(f"🧹 Cleaning agent workspace to maximize reasoning...")
+    container_ws = f"/root/.openclaw/state/agents/{agent_id}"
+    META_FILES_TO_CLEAN = [
+        ".containers.txt", ".git_log.txt", "AGENT_REPORT.md", 
+        "docker-compose.override.yml"
+    ]
+    for mf in META_FILES_TO_CLEAN:
+        subprocess.run(["docker", "exec", "openclaw-gateway", "rm", "-f", f"{container_ws}/{mf}"], capture_output=True)
+
+    # Inject MENTAL RESET instruction
+    full_message = f"[MENTAL RESET: Clear all previous context, assumptions, and cached state. Start fresh.]\n\n{message}"
+    
     cmd = [
         "docker", "exec", "openclaw-gateway", 
-        "openclaw", "agent", "--agent", agent_id, "--message", message, "--json", "--timeout", str(timeout), "--verbose", "on"
+        "openclaw", "agent", "--agent", agent_id, "--message", full_message, "--json", "--timeout", str(timeout), "--verbose", "on"
     ]
     print(f"Triggering [{agent_id.upper()}] via CLI (Timeout: {timeout}s)...")
     
@@ -463,8 +836,9 @@ def check_or_clone_repo(env):
         print("PROJECT_NAME not provided in .env. Skipping auto-clone.")
         return env
 
-    base_dir = "/home/nicolasmd/Development/agents-developmet"
-    project_path = f"{base_dir}/{project_name}"
+    AI_HUB_DIR = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(AI_HUB_DIR)
+    project_path = os.path.join(base_dir, project_name)
     env["PROJECT_PATH"] = project_path
     
     owner = env.get("GITHUB_USER")
@@ -485,8 +859,8 @@ def check_or_clone_repo(env):
 def poll_and_process(env):
     env = check_or_clone_repo(env)
     
-    # Safe startup lock cleanup (with timeout so it never hangs)
-    safe_clear_locks()
+    # Safe startup lock cleanup (with timeout so it never hangs, silent to avoid log spam)
+    safe_clear_locks(silent=True)
 
     project_path = env.get("PROJECT_PATH")
     items = fetch_todo_items(env)
@@ -552,27 +926,70 @@ def poll_and_process(env):
 
             # 2. Dispatch Work to Dev Agent
             print(f"Claiming task with {assigned_agent.upper()} agent...")
+            
+            # ── Schema Injection: Feed the 3B model the schema directly ──
+            # Small models skip reading files. We inject the ground truth inline.
+            model_match = _re.search(r'for\s+(\w+)', item['title'])
+            model_name = model_match.group(1) if model_match else ""
+            schema_excerpt = extract_schema_for_model(project_path, model_name) if model_name else ""
+            
+            # Also check for existing factory to prevent duplicates
+            existing_factory = ""
+            if model_name:
+                factory_path = os.path.join(project_path, "spec", "factories", f"{model_name.lower()}s.rb")
+                if os.path.exists(factory_path):
+                    with open(factory_path, 'r') as f:
+                        existing_factory = f.read()
+            
             work_prompt = (
-                f"Task Title: {item['title']}\n"
-                f"Description: {item['body']}\n\n"
-                "IMPORTANT INSTRUCTIONS — READ CAREFULLY:\n"
-                "1. You MUST use your 'write' or 'edit' file tools to create or modify actual files in the repository workspace.\n"
-                "2. Do NOT just describe what you would do. Actually do it by calling your file tools.\n"
-                "3. If the task requires creating spec/test files, factories, or source code — write every file using your 'write' tool.\n"
-                "4. After writing all files, reply with a brief summary listing each file you created or modified and why.\n"
-                "5. NEVER respond with only a plan or description — only a response that includes real file writes counts as success.\n"
-                "6. When finished writing all files, also use your 'write' tool to save a file called AGENT_REPORT.md "
-                "at the root of the workspace with a markdown summary of all the changes you made.\n"
-                "7. CRITICAL RULE: Before writing any code, tests, or modifying `rails_helper.rb`, you MUST use your tools to read the `Gemfile` to verify exactly which dependencies (like factory_bot_rails, simplecov, etc.) are actually installed in the project. NEVER assume a gem is installed without checking first.\n"
-                "8. CRITICAL RULE: When assigned a TESTING task, you are FORBIDDEN from modifying any file inside the `app/` directory. You must ONLY write files in the `spec/` directory. NEVER leak your internal workspace files, logs, or agent reports into the git repository. Your commits must ONLY contain the actual code/tests."
+                f"## Task\n"
+                f"**Title:** {item['title']}\n"
+                f"**Description:**\n{item['body']}\n\n"
             )
+            
+            if schema_excerpt:
+                work_prompt += (
+                    f"## Database Schema (GROUND TRUTH — use ONLY these column names)\n"
+                    f"```ruby\n{schema_excerpt}\n```\n\n"
+                )
+            
+            if existing_factory:
+                work_prompt += (
+                    f"## Existing Factory (DO NOT duplicate — edit if needed)\n"
+                    f"```ruby\n{existing_factory}\n```\n\n"
+                )
+            
+            task_id = item.get('id', 'unknown')
+            saved_feedback = get_feedback(task_id)
+            hallucination_count = get_state_counter(task_id, 'hallucination')
+            
+            if saved_feedback:
+                work_prompt += saved_feedback
+            
+            if hallucination_count > 0:
+                work_prompt += (
+                    f"\n⚠️  **CRITICAL RE-TRY WARNING (Attempt {hallucination_count+1})**\n"
+                    f"Your previous attempt was REJECTED because you did not write any code files to disk.\n"
+                    f"You MUST use the `write_file` tool or follow the File pattern below to output code.\n"
+                    f"DO NOT just provide a text explanation. Output the full file contents.\n\n"
+                )
+            
+            work_prompt += (
+                "## Instructions\n"
+                "Your full protocol is in `SYSTEM.md`.\n"
+                "CRITICAL: Use ONLY the column names shown in the Database Schema above. Do NOT invent attributes.\n\n"
+                "IMPORTANT: To write or modify files, you MUST use the following EXACT Markdown format in your text response:\n\n"
+                "File: path/to/your/file.rb\n"
+                "```ruby\n"
+                "# your full code here\n"
+                "```\n\n"
+                "You must output the full file content inside the block. When done, write a short summary.\n"
+            )
+
             
             # --- Sync Host Source Code into Container Workspace ---
             container_ws = f"/root/.openclaw/workspaces/{assigned_agent}"
             print(f"Syncing code files into container workspace {container_ws}...")
-            
-            # Backup agent prompts (SYSTEM.md, etc.) before wiping the workspace
-            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"mkdir -p /tmp/oc_backup && cp {container_ws}/*.md {container_ws}/*.json /tmp/oc_backup/ 2>/dev/null || true"], capture_output=True)
             
             subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"rm -rf {container_ws}/*"], capture_output=True)
             subprocess.run(["docker", "cp", f"{project_path}/.", f"openclaw-gateway:{container_ws}/"], capture_output=True)
@@ -582,8 +999,8 @@ def poll_and_process(env):
                             f"rm -rf {container_ws}/.git {container_ws}/node_modules {container_ws}/tmp {container_ws}/log {container_ws}/vendor {container_ws}/public"], 
                            capture_output=True)
 
-            # Restore agent prompts
-            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"cp /tmp/oc_backup/*.md /tmp/oc_backup/*.json {container_ws}/ 2>/dev/null || true"], capture_output=True)
+            # Expose agent context context to gateway root (OpenClaw requires SYSTEM.md at workspace root)
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"cp {container_ws}/.openclaw/*.md {container_ws}/.openclaw/*.json {container_ws}/ 2>/dev/null || true"], capture_output=True)
 
             # Clear any stale session locks for this agent BEFORE triggering
             print(f"Clearing stale session locks for [{assigned_agent}]...")
@@ -615,12 +1032,20 @@ def poll_and_process(env):
             work_response_text = work_res.get("response", "").strip()
             print(f"Dev Agent Response: {work_response_text}")
             
-            # Secondary validation: check response content for timeout signatures
-            # even if aborted flag was somehow missed
+            # Secondary validation: check response content for system errors or timeout signatures
+            SYSTEM_ERRORS = ["404", "model not found", "error 500", "connection refused", "bad gateway"]
             TIMEOUT_STRINGS = ["request timed out", "timed out before a response", "increase `agents.defaults"]
+            
             response_lower = work_response_text.lower()
+            is_system_error = any(sig in response_lower for sig in SYSTEM_ERRORS)
             is_timeout_text = any(sig in response_lower for sig in TIMEOUT_STRINGS)
             
+            if is_system_error:
+                reason = f"SYSTEM ERROR DETECTED: {work_response_text}. Stopping to prevent infinite retry loops."
+                print(f"🛑 {reason}")
+                handle_failure(item, env, reason)
+                continue
+
             is_valid_report = (len(work_response_text.strip()) > 50 and not is_timeout_text)
             if work_res.get("progress_detected"):
                  # Override validation: if files were written, the work is salvageable despite the gateway timeout message
@@ -648,6 +1073,12 @@ def poll_and_process(env):
             # --- Sync Container Updates back to Host ---
             print("Syncing modifications back from container to host...")
             container_ws = f"/root/.openclaw/workspaces/{assigned_agent}"
+            
+            # Preserve agent edits to SYSTEM.md etc by moving them back into .openclaw/ before sync
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"mv {container_ws}/SYSTEM.md {container_ws}/SOUL.md {container_ws}/IDENTITY.md {container_ws}/TOOLS.md {container_ws}/AGENTS.md {container_ws}/.openclaw/ 2>/dev/null || true"], capture_output=True)
+            # Destroy transient files so they don't leak to host root
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"rm -f {container_ws}/.containers.txt {container_ws}/.git_log.txt {container_ws}/mutation_output_fixed.txt {container_ws}/*.out {container_ws}/docker-compose.override.yml"], capture_output=True)
+
             subprocess.run(["docker", "cp", f"openclaw-gateway:{container_ws}/.", f"{project_path}/"], capture_output=True)
 
             print(f"✅ {assigned_agent.upper()} turn complete.")
@@ -675,8 +1106,18 @@ def poll_and_process(env):
                 write_success = True
                 comment_on_issue(item.get("number"), f"🤖 **{assigned_agent.upper()} Agent Report & Analysis**:\n\n{report_content}", env)
 
-            subprocess.run(["git", "-C", project_path, "add", "."], capture_output=True)
-            # Only commit if changes were actually made
+            # ─── Selective Git Add ───────────────────────────────────────────────────
+            # Use specific patterns to avoid adding internal agent files (SYSTEM.md, etc.)
+            GIT_WHITELIST = ["spec/", "app/", "db/", "config/", "lib/", "test/", "agent-report/"]
+            for dir_pattern in GIT_WHITELIST:
+                subprocess.run(["git", "-C", project_path, "add", dir_pattern], capture_output=True)
+            
+            # Explicitly UNSTAGE/REMOVE meta-files if they were accidentally added
+            META_FILES_TO_IGNORE = ["SYSTEM.md", "docker-compose.override.yml", "AGENT_REPORT.md", ".containers.txt", ".git_log.txt", ".openclaw/"]
+            for meta in META_FILES_TO_IGNORE:
+                subprocess.run(["git", "-C", project_path, "rm", "--cached", "-r", meta], capture_output=True)
+
+            # Only commit if changes were actually made in whitelist dirs
             git_status = subprocess.run(["git", "-C", project_path, "status", "--porcelain"], capture_output=True, text=True)
             has_changes = bool(git_status.stdout.strip())
             
@@ -688,6 +1129,8 @@ def poll_and_process(env):
             # If the agent created/modified spec/, app/, db/, config/, or any real source files -> NOT audit mode.
             REAL_CODE_DIRS = ("spec/", "app/", "db/", "config/", "lib/", "test/")
             is_audit_mode = True
+            
+            # Check 1: Uncommitted changes from this turn
             lines = git_status.stdout.strip().split("\n")
             for line in lines:
                 stripped = line.strip()
@@ -695,21 +1138,57 @@ def poll_and_process(env):
                     continue
                 # Get the file path part (after the 2-char git status prefix)
                 file_path = stripped[3:] if len(stripped) > 3 else stripped
+                
+                # A change is ONLY considered "real code" if it's in a code directory
+                # AND it's not a report or internal system file.
                 is_report_only = (
                     "agent-report" in file_path
                     or "AGENT_REPORT" in file_path.upper()
                 )
-                is_real_code = any(file_path.startswith(d) for d in REAL_CODE_DIRS)
-                if is_real_code or (not is_report_only):
+                
+                is_internal_system = any(kw in file_path for kw in [
+                    "SYSTEM.md", "docker-compose.override.yml", ".containers.txt", ".git_log.txt", ".openclaw/"
+                ])
+                
+                is_real_code_dir = any(file_path.startswith(d) for d in REAL_CODE_DIRS)
+                
+                if is_real_code_dir and (not is_report_only) and (not is_internal_system):
+                    # ANTI-STUB CHECK: Verify the file isn't just a rails-generated placeholder
+                    full_path = os.path.join(project_path, file_path)
+                    if file_path.endswith('_spec.rb') and os.path.exists(full_path):
+                        try:
+                            with open(full_path, 'r') as fcheck:
+                                content = fcheck.read()
+                            if 'pending "add some examples' in content and content.count('\n') < 10:
+                                print(f"⚠️  [STUB] {file_path} is a rails-generated empty spec. Ignoring.")
+                                continue  # skip this file, keep checking others
+                        except Exception:
+                            pass
                     is_audit_mode = False  # Actual source/spec files were touched!
                     break
 
+            # Check 2: If no uncommitted changes, check if the BRANCH itself has committed
+            # code diffs vs production (from a previous successful agent turn).
+            # This prevents false-positive hallucination detection on resumed branches.
+            if is_audit_mode:
+                branch_diff = subprocess.run(
+                    ["git", "-C", project_path, "diff", "--name-only", "production...HEAD"],
+                    capture_output=True, text=True, timeout=30
+                )
+                if branch_diff.returncode == 0:
+                    for diff_file in branch_diff.stdout.strip().split("\n"):
+                        diff_file = diff_file.strip()
+                        if diff_file and any(diff_file.startswith(d) for d in REAL_CODE_DIRS):
+                            is_audit_mode = False
+                            print(f"📦 Branch has pre-committed code: {diff_file} — skipping hallucination guard.")
+                            break
+
             if is_audit_mode:
                 # ── Hallucination guard ──────────────────────────────────────────
-                # Small models (qwen2.5:1.5b) often CLAIM to write files in their
+                # Small models (qwen2.5-coder:3b) often CLAIM to write files in their
                 # text response without actually calling the write tool.
-                # If the task body implies code/spec files were expected but the
-                # agent only produced a report, treat this as a DEV FAILURE.
+                # RESCUE PHASE: Try to parse write tool calls from the text response
+                # and execute them manually before declaring hallucination.
                 CODE_TASK_KEYWORDS = [
                     "create spec/", "spec/factories", "spec/models", "spec/graphql",
                     "spec/requests", "spec/controllers", "write test", "write spec",
@@ -720,157 +1199,280 @@ def poll_and_process(env):
                 task_implies_code = any(kw in task_body_lower for kw in CODE_TASK_KEYWORDS)
 
                 if task_implies_code:
-                    reason = (
-                        "AGENT HALLUCINATION: Task required creating code/spec files but the agent "
-                        "only produced a text report — it claimed to use the write tool but never did. "
-                        "Sending back to 'To Do' for a retry."
-                    )
-                    print(f"⚠️  {reason}")
-                    send_telegram(f"♻️ Task '{item['title']}' failed: agent hallucinated file writes. Retrying.")
-                    if item.get("number"):
-                        comment_on_issue(item.get("number"),
-                            f"🤖 **Agent Execution Warning:**\n\nThe agent described creating files but "
-                            f"did not actually write them to disk. Moving back to **To Do** for a retry.\n\n"
-                            f"> {work_response_text[:500]}", env)
-                    print("⚠️ [RESILIENCE] Skipping Git workspace reset due to Hallucination guard (preserving partial work).")
-                    # subprocess.run(["git", "-C", project_path, "reset", "--hard", "HEAD"], capture_output=True)
-                    # subprocess.run(["git", "-C", project_path, "clean", "-fd"], capture_output=True)
-                    # subprocess.run(["git", "-C", project_path, "checkout", "production"], capture_output=True)
-                    # subprocess.run(["git", "-C", project_path, "branch", "-D", cur_branch], capture_output=True)
-                    move_task_column(item['id'], item['title'], "To Do", env)
-                    continue
+                    # ── RESCUE ATTEMPT: Parse write calls from text and execute ──
+                    rescued = rescue_hallucinated_writes(work_response_text, container_ws)
+                    if rescued > 0:
+                        print(f"🔧 [RESCUE] Recovered {rescued} file(s) from text response. Re-syncing...")
+                        subprocess.run(["docker", "cp", f"openclaw-gateway:{container_ws}/.", f"{project_path}/"], capture_output=True)
+                        
+                        # Apply same selective add and meta-ignore policy
+                        GIT_WHITELIST = ["spec/", "app/", "db/", "config/", "lib/", "test/", "agent-report/"]
+                        for dir_pattern in GIT_WHITELIST:
+                            subprocess.run(["git", "-C", project_path, "add", dir_pattern], capture_output=True)
+                        
+                        META_FILES_TO_IGNORE = ["SYSTEM.md", "docker-compose.override.yml", "AGENT_REPORT.md", ".containers.txt", ".git_log.txt", ".openclaw/"]
+                        for meta in META_FILES_TO_IGNORE:
+                            subprocess.run(["git", "-C", project_path, "rm", "--cached", "-r", meta], capture_output=True)
 
-                # Genuine audit task (only a report was expected)
-                print("📋 No code modifications made (Audit mode confirmed). Bypassing QA Turn.")
-                move_task_column(item['id'], item['title'], "Pull request Review", env)
-                if has_changes:
-                    subprocess.run(["git", "-C", project_path, "push", "-f", "origin", cur_branch], capture_output=True)
-                    create_pull_request(item.get("number"), env, cur_branch)
-                send_telegram(f"🎉 SUCCESS: Audit Report drafted for issue #{item.get('number')}. Ready at 'Pull Request Review'.")
-                continue
+                        git_status = subprocess.run(["git", "-C", project_path, "status", "--porcelain"], capture_output=True, text=True)
+                        
+                        # Re-evaluate: did the rescue produce actual code files?
+                        rescue_has_code = False
+                        for rline in git_status.stdout.strip().split("\n"):
+                            rstripped = rline.strip()
+                            if len(rstripped) > 3:
+                                rfp = rstripped[3:]
+                                if any(rfp.startswith(d) for d in REAL_CODE_DIRS):
+                                    rescue_has_code = True
+                                    break
+                        
+                        if rescue_has_code:
+                            is_audit_mode = False
+                            print("✅ [RESCUE] Files successfully written! Proceeding to QA.")
+                            # Fall through to QA workflow below (don't continue)
+                        else:
+                            print("⚠️  [RESCUE] Files were written but no real code detected.")
+                    
+                    # If rescue didn't fix it, apply hallucination guard with retry limit
+                    if is_audit_mode:
+                        task_id = item.get('id', 'unknown')
+                        attempt = increment_state_counter(task_id, 'hallucination')
+                        
+                        if attempt >= MAX_HALLUCINATION_RETRIES:
+                            reason = (
+                                f"HALLUCINATION LIMIT REACHED ({attempt}/{MAX_HALLUCINATION_RETRIES}): "
+                                "The agent repeatedly failed to write files to disk. "
+                                "Escalating to Backlog for human review."
+                            )
+                            print(f"🛑 {reason}")
+                            handle_failure(item, env, reason)
+                            continue
+                        
+                        reason = (
+                            f"AGENT HALLUCINATION (attempt {attempt}/{MAX_HALLUCINATION_RETRIES}): "
+                            "Task required creating code/spec files but the agent only produced a text report. "
+                            "Retrying."
+                        )
+                        print(f"⚠️  {reason}")
+                        send_telegram(f"♻️ Task '{item['title']}' hallucination ({attempt}/{MAX_HALLUCINATION_RETRIES}). Retrying.")
+                        if item.get("number"):
+                            comment_on_issue(item.get("number"),
+                                f"🤖 **Agent Hallucination (attempt {attempt}/{MAX_HALLUCINATION_RETRIES}):**\n\n"
+                                f"The agent did not write files to disk. Retrying.\n\n"
+                                f"> {work_response_text[:300]}", env)
+                        print("⚠️ [RESILIENCE] Preserving workspace for retry.")
+                        move_task_column(item['id'], item['title'], "To Do", env)
+                        continue
+
+                if is_audit_mode:
+                    # Genuine audit task (only a report was expected)
+                    print("📋 No code modifications made (Audit mode confirmed). Bypassing QA Turn.")
+                    move_task_column(item['id'], item['title'], "Pull request Review", env)
+                    if has_changes:
+                        subprocess.run(["git", "-C", project_path, "push", "-f", "origin", cur_branch], capture_output=True)
+                        create_pull_request(item.get("number"), env, cur_branch)
+                    send_telegram(f"🎉 SUCCESS: Audit Report drafted for issue #{item.get('number')}. Ready at 'Pull Request Review'.")
+                    continue
 
             print("✅ Code touch detected. Moving to QA verification workflow.")
-            send_telegram(f"✅ {assigned_agent.upper()} implemented turn for '{item['title']}'. Reviewing in QA.")
-            move_task_column(item['id'], item['title'], "In Review QA", env)
+            
+            # --- 1. ENSURE DEV CONTAINER: Verify container is running with volume mount ---
+            config = load_project_config(project_path)
+            ruby_container = config.get("container_name", "ordenapp_web_container")
+            print(f"🧐 [QA] Verifying execution inside {ruby_container}...")
+            ensure_dev_container(project_path)
 
-            # 4. Trigger QA turn
-            print("Clearing stale session locks for [qa]...")
-            safe_clear_locks("qa")
+            # --- MULTI-AGENT FIX: Empowering QA gracefully ---
+            # Build a list of ONLY the spec files the Backend agent created/modified
+            changed_specs = []
+            branch_diff = subprocess.run(
+                ["git", "-C", project_path, "diff", "--name-only", "production...HEAD"],
+                capture_output=True, text=True, timeout=30
+            )
+            if branch_diff.returncode == 0:
+                for f in branch_diff.stdout.strip().split("\n"):
+                    f = f.strip()
+                    if f.startswith("spec/") and f.endswith("_spec.rb"):
+                        changed_specs.append(f)
             
-            print("🔄 Hot-swapping Backend Agent changes into the QA Testing container...")
-            ruby_container = "ordenapp_web_container"
-            sync_dirs = ["app", "spec", "db", "config", "Gemfile", "Gemfile.lock"]
-            for d in sync_dirs:
-                src_path = os.path.join(project_path, d)
-                if os.path.exists(src_path):
-                    # Copies the host folder/file into /app/ in the container
-                    subprocess.run(["docker", "cp", src_path, f"{ruby_container}:/app/"], capture_output=True)
-            
-            # Clear stale QA log to prevent false successes from previous turns
-            qa_log_path = os.path.join(project_path, "qa_heartbeat.log")
-            if os.path.exists(qa_log_path): os.remove(qa_log_path)
-            # Build a list of actual files the backend agent changed so QA can review them specifically
-            changed_files = []
+            # Also check uncommitted changes
             for line in git_status.stdout.strip().split("\n"):
                 stripped = line.strip()
-                if stripped and len(stripped) > 3:
-                    changed_files.append(stripped[3:])
-            changed_files_str = "\n".join(f"  - {f}" for f in changed_files) if changed_files else "  (no files detected)"
+                if len(stripped) > 3:
+                    fp = stripped[3:]
+                    if fp.startswith("spec/") and fp.endswith("_spec.rb") and fp not in changed_specs:
+                        changed_specs.append(fp)
+            
+            if not changed_specs:
+                # Fallback: run specs only in model/graphql dirs (avoids broken view specs)
+                rspec_target = "spec/models spec/graphql spec/requests"
+            else:
+                rspec_target = " ".join(changed_specs)
+            
+            print(f"🧪 QA will test ONLY: {rspec_target}")
+            qa_workspace = "/root/.openclaw/workspaces/qa"
+            
+            # Create a focused test wrapper that only runs the relevant specs
+            subprocess.run([
+                "docker", "exec", "openclaw-gateway", "bash", "-c",
+                f"echo '#!/bin/bash\ndocker exec {ruby_container} bash -l -c \"bundle exec rspec {rspec_target}\"' > {qa_workspace}/run_tests.sh && chmod +x {qa_workspace}/run_tests.sh"
+            ])
 
             qa_prompt = (
-                f"Task Title: {item['title']}\n"
-                f"Description: {item['body']}\n\n"
-                "QA TEST EXECUTION INSTRUCTIONS:\n"
-                "The backend developer has finished implementing. The following code files were modified:\n"
-                f"{changed_files_str}\n\n"
-                "Your job is to ACTUALLY RUN THE TEST SUITE to verify the code genuinely works!\n"
-                "1. A Docker container named 'ordenapp_web_container' is already running the Rails app.\n"
-                "2. You MUST use your 'exec' tool to run the test suite EXACTLY like this:\n"
-                "   `bash -c \"docker exec ordenapp_web_container bash -l -c 'bundle exec rspec' | tee /root/project/qa_heartbeat.log\"`\n"
-                "   (NOTE: The `tee` ensures the log is saved to the gateway, and the tests run in the Rails container).\n"
-                "3. CRITICAL: DO NOT PROVIDE PROGRESS UPDATES. DO NOT say 'Please wait' or 'I will now run'.\n"
-                "4. ONLY REPLY AFTER the test execution is 100% complete and you have analyzed the output.\n"
-                "5. If the test passes (0 failures, mostly green), reply STRICTLY with the single word: SUCCESS\n"
-                "6. CRITICAL RULE: When a test fails, you MUST use your tools to capture the exact stdout/stderr from the terminal. Copy and paste the REAL terminal output into your response to the Backend. NEVER output placeholder text or brackets.\n"
-                "7. You MUST use your exec tool before replying. NEVER guess!\n"
-                "8. CRITICAL RULE: You are the gatekeeper. You MUST run the RSpec test suite. If the tests FAIL, throw errors, or do not pass 100%, you are FORBIDDEN from moving the card to Pull Request. You MUST reject the task, move it back to 'In Progress', and send the EXACT terminal output of the failure to the Backend agent so they can fix it. Repeat this loop until tests pass.\n"
-                "9. CRITICAL INFRASTRUCTURE RULE: If the terminal output contains errors like 'No such container', 'docker: Error response', or 'command not found', YOU MUST NOT analyze the Ruby code. Reject the task immediately and output EXACTLY this text: 'CRITICAL INFRASTRUCTURE ERROR: The Docker container is not running or the test command failed to execute. Please start the container first.'"
+                f"You are a QA test runner. Your ONLY job is to execute tests and report what happened.\n\n"
+                f"STEP 1: Use your `exec` tool to run this command:\n"
+                f"bash ./run_tests.sh\n\n"
+                f"STEP 2: Copy the COMPLETE terminal output from the test execution into your response.\n"
+                f"You MUST include the full output including the lines that say how many examples ran,\n"
+                f"how many failures occurred, and the elapsed time.\n\n"
+                f"STEP 3: After the terminal output, write a single verdict line:\n"
+                f"VERDICT: PASS (if 0 failures) or VERDICT: FAIL (if any failures or errors)\n\n"
+                f"CRITICAL RULES:\n"
+                f"- You MUST actually execute the command using your `exec` tool. Do NOT guess the result.\n"
+                f"- Do NOT just write a JSON code block in text. You MUST invoke the real tool execution.\n"
+                f"- If the exec tool fails or is blocked, report the exact error. Do NOT say PASS.\n"
+                f"- Your response MUST contain the text 'examples' and 'failures' from RSpec output.\n"
+                f"- If your response does not contain real terminal output, it will be rejected.\n"
             )
 
+            print("🛡️  Triggering autonomous QA Agent...")
+            send_telegram(f"✅ {assigned_agent.upper()} implemented turn for '{item['title']}'. QA reviewing now.")
+            move_task_column(item['id'], item['title'], "In Review QA", env)
+            # Sync code to QA workspace
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"rm -rf {qa_workspace}/*"], capture_output=True)
+            subprocess.run(["docker", "cp", f"{project_path}/.", f"openclaw-gateway:{qa_workspace}/"], capture_output=True)
+            
             qa_res = trigger_agent("qa", qa_prompt, timeout=3600)
             if not qa_res:
-                handle_retry(item, env, "QA FAILURE: Agent returned None (process error).", cur_branch)
+
+                handle_retry(item, env, "QA FAILURE: Agent returned None.", cur_branch)
                 continue
             
-            # ── QA Abort/Timeout Interception ────────────────────────────
-            if qa_res.get("aborted"):
-                qa_duration = qa_res.get("raw", {}).get("result", {}).get("meta", {}).get("durationMs", "?")
-                
-                # FINAL RESILIENCE CHECK: Look for the heartbeat log on the host
-                qa_log_path = os.path.join(project_path, "qa_heartbeat.log")
-                if os.path.exists(qa_log_path):
-                    with open(qa_log_path, 'r') as f:
-                        log_content = f.read()
-                        if "0 failures" in log_content and "passed" in log_content.lower():
-                            print("⚠️  QA ABORTED but Heartbeat log shows SUCCESS. Salvaging QA result...")
-                            qa_response_text = "SUCCESS (Salvagued from heartbeat log)"
-                        else:
-                            print(f"⚠️  QA ABORTED and log shows failures or is incomplete. Failing.")
-                            handle_retry(item, env, f"QA TIMEOUT/FAILURE: {qa_duration}ms. Log: {log_content[-100:]}", cur_branch)
-                            continue
-                else:
-                    handle_retry(item, env,
-                        f"QA TIMEOUT: OpenClaw QA agent was aborted internally "
-                        f"(durationMs={qa_duration}). No heartbeat log found. Retrying.", cur_branch)
-                    continue
-            else:
-                qa_response_text = qa_res.get("response", "").strip()
+            # ── QA Outcome Analysis (Evidence-Based) ─────────────────────────
+            qa_response_text = qa_res.get("response", "").strip()
             print(f"QA Response: {qa_response_text}")
+            qa_lower = qa_response_text.lower()
             
-            if "SUCCESS" not in qa_response_text.upper() or "ERROR" in qa_response_text.upper():
-                # Regla B: Detect Critical System/Infrastructure Failures
-                system_error_patterns = [
-                    "no such container", "docker:", "not found", "failed to execute", 
-                    "connection reset", "gateway error", "timeout", "abort", "failed to parse"
-                ]
-                is_system_error = any(p in qa_response_text.lower() for p in system_error_patterns)
+            # Guard 1: Exec-denied or allowlist failures
+            exec_failure_patterns = ["exec denied", "allowlist", "permission denied", "not permitted"]
+            qa_exec_failed = any(p in qa_lower for p in exec_failure_patterns)
+            
+            if qa_exec_failed:
+                print(f"🚨 [QA EXEC BLOCKED] The test runner was blocked by the gateway: {qa_response_text[:200]}")
+                handle_retry(item, env, "QA EXEC DENIED: The gateway blocked test execution (allowlist miss). Retrying after config fix.", cur_branch)
+                continue
+            
+            # Guard 2: Tool call hallucination (QA outputs JSON instead of running)
+            is_tool_call_hallucination = '"name"' in qa_lower and ('"arguments"' in qa_lower or 'arguments:' in qa_lower)
+            if is_tool_call_hallucination:
+                print("⚠️ QA MODEL HALLUCINATION detected: Agent output tool JSON instead of running tests.")
+                handle_retry(item, env, "QA MODEL HALLUCINATION: QA agent output tool call JSON instead of executing tests. Retrying task.", cur_branch)
+                continue
+            
+            # Guard 3: Hollow response detection — verify RSpec evidence exists
+            rspec_result = parse_rspec_result(qa_response_text)
+            
+            if not rspec_result['has_evidence']:
+                # QA agent didn't produce real RSpec output — possible hallucination
+                task_id = item.get('id', 'unknown')
+                hollow_count = increment_state_counter(task_id, 'qa_hollow')
                 
-                if is_system_error:
-                    # IMPLEMENTATION: Anti-Loop Recovery Recipes
-                    task_id = item.get('id', 'unknown')
-                    attempts = RECOVERY_ATTEMPTS.get(task_id, 0)
+                if hollow_count >= 2:
+                    # FALLBACK: Run RSpec directly from orchestrator
+                    print(f"🔧 [DIRECT QA] QA agent hollow {hollow_count}x. Running RSpec directly (bypassing agent)...")
+                    spec_list = changed_specs if changed_specs else ["spec/models", "spec/graphql", "spec/requests"]
+                    direct_output = run_rspec_directly(project_path, spec_list, ruby_container)
+                    print(f"📋 [DIRECT QA] Output:\n{direct_output[:500]}")
+                    qa_response_text = direct_output
+                    rspec_result = parse_rspec_result(direct_output)
                     
-                    if attempts < 1:
-                        print(f"🛠️  [RECOVERY RECIPE] Infrastructure failure detected (Attempt {attempts + 1}/1). Executing auto-recovery (docker compose up -d)...")
-                        RECOVERY_ATTEMPTS[task_id] = attempts + 1
-                        
-                        # Recipe: Spin up the container in development mode
-                        recovery_env = os.environ.copy()
-                        recovery_env["ENV"] = "development"
-                        subprocess.run(["docker", "compose", "up", "-d"], cwd=project_path, env=recovery_env, capture_output=True)
-                        
-                        handle_retry(item, env, "QA INFRASTRUCTURE RECOVERY: Auto-started missing Docker container. Retrying.", cur_branch)
+                    if not rspec_result['has_evidence']:
+                        # Even direct execution failed — infrastructure problem
+                        system_error_patterns = [
+                            "no such container", "docker:", "connection reset",
+                            "gateway error", "timed out", "TIMEOUT:"
+                        ]
+                        is_system_error = any(p in direct_output.lower() for p in system_error_patterns)
+                        if is_system_error:
+                            attempts = get_state_counter(task_id, 'recovery')
+                            if attempts < 1:
+                                print(f"🛠️  [RECOVERY] Infrastructure failure. Auto-recovery...")
+                                increment_state_counter(task_id, 'recovery')
+                                recovery_env = os.environ.copy()
+                                recovery_env["ENV"] = "development"
+                                subprocess.run(["docker", "compose", "up", "-d"], cwd=project_path, env=recovery_env, capture_output=True)
+                                handle_retry(item, env, "QA INFRASTRUCTURE RECOVERY: Auto-started Docker container. Retrying.", cur_branch)
+                                continue
+                            else:
+                                handle_failure(item, env, f"CRITICAL SYSTEM FAILURE (Persistent): {direct_output[:500]}")
+                                continue
+                        handle_retry(item, env, f"QA DIRECT EXECUTION FAILED: {direct_output[:300]}", cur_branch)
                         continue
-                    else:
-                        print("❌ [RECOVERY FAILED] Max attempts reached. Escalating to Human.")
-                        handle_failure(item, env, f"CRITICAL SYSTEM FAILURE (Persistent after recovery): {qa_response_text}")
                 else:
-                    # Regla A: Return to In Progress for Code/Test errors
-                    print(f"❌ QA REJECTION (Code Error): {qa_response_text}")
-                    send_telegram(f"⚠️ QA: Tests failed for '{item['title']}'. Returning to Backend (In Progress).")
+                    print(f"⚠️ [QA HOLLOW] Response lacks RSpec evidence (attempt {hollow_count}/2). Retrying QA...")
+                    move_task_column(item['id'], item['title'], "In Review QA", env)
+                    continue
+            
+            # ── We now have verified RSpec evidence ──────────────────────────
+            print(f"📊 [RSPEC] {rspec_result['raw_summary']} | errors: {rspec_result['errors']}")
+            
+            if rspec_result['passed']:
+                # All tests pass — proceed to success finalization
+                print(f"✅ [QA VERIFIED] All tests pass: {rspec_result['raw_summary']}")
+                clear_feedback(item.get('id', 'unknown'))
+            else:
+                # Tests failed — apply convergence analysis
+                task_id = item.get('id', 'unknown')
+                cycle_num = record_qa_cycle(
+                    task_id,
+                    rspec_result['examples'],
+                    rspec_result['failures'],
+                    rspec_result['errors']
+                )
+                
+                should_continue, reason, _, metrics = evaluate_convergence(task_id)
+                trend_str = " → ".join(str(s) for s in metrics.get('trend', []))
+                print(f"📈 [CONVERGENCE] Cycle {cycle_num}: {reason} | Trend: [{trend_str}]")
+                
+                if should_continue:
+                    # Build targeted feedback and send back to Backend
+                    print(f"♻️ [FEEDBACK LOOP] Sending structured error feedback to Backend...")
+                    send_telegram(f"♻️ QA Cycle {cycle_num} for '{item['title']}': {reason}")
                     
                     if item.get("number"):
-                        comment_on_issue(item.get("number"), f"🤖 **QA Rejected (Code/Test error):**\n\nReturning to **In Progress**. Backend must fix the following errors identified during RSpec execution:\n\n> {qa_response_text}", env)
+                        comment_on_issue(item.get("number"),
+                            f"🤖 **QA Cycle {cycle_num} — {reason}**\n\n"
+                            f"```\n{qa_response_text[:2000]}\n```", env)
                     
-                    if not qa_res.get("aborted"):
-                        print("⚠️ [RESILIENCE] Preserving workspace for Backend correction.")
-                    else:
-                        print("QA TIMEOUT: Preserving workspace (Backend work salvaged).")
+                    # Inject structured feedback into work_prompt
+                    qa_error_context = build_targeted_feedback(qa_response_text, rspec_result)
                     
+                    # SAVE IT PERSISTENTLY
+                    save_feedback(task_id, qa_error_context)
+                    
+                    work_prompt = work_prompt.rstrip() + qa_error_context
+                    
+                    print("⚠️ [RESILIENCE] Preserving workspace for Backend correction.")
                     move_task_column(item['id'], item['title'], "In Progress", env)
+                else:
+                    # Convergence says stop — escalate to human
+                    print(f"🛑 [CONVERGENCE STOP] {reason}")
+                    send_telegram(
+                        f"🛑 Convergence stop for '{item['title']}': {reason}\n"
+                        f"Trend: [{trend_str}] | Pass rate: {metrics.get('pass_rate', 0):.0%}"
+                    )
+                    handle_failure(item, env,
+                        f"CONVERGENCE STOP after {cycle_num} cycles: {reason}. "
+                        f"Error trend: [{trend_str}]. "
+                        f"Last result: {rspec_result['raw_summary']}"
+                    )
+                    clear_feedback(item.get('id', 'unknown'))
+                
                 continue
 
+
             # 5. Success Finalization
+            restore_production_container(project_path)
             move_task_column(item['id'], item['title'], "Pull request Review", env)
             print(f"Pushing isolate branch {cur_branch} to GitHub...")
             # Use --force in case the agent rewrites and PR existed previously, but handle safely
@@ -908,5 +1510,18 @@ def orchestrate():
             print(f"Critical error in polling loop: {e}")
         time.sleep(15)  # Constantly poll every 15 seconds safely
 
+LOCK_FILE = "/tmp/mission_control.lock"
+
+def acquire_instance_lock():
+    lock_fd = open(LOCK_FILE, 'w')
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_fd.write(str(os.getpid()))
+        return lock_fd
+    except BlockingIOError:
+        print("❌ Another instance is already running. Exiting to prevent concurrency issues.")
+        sys.exit(1)
+
 if __name__ == "__main__":
+    _lock = acquire_instance_lock()
     orchestrate()

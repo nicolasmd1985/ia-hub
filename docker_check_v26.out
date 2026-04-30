@@ -1,3 +1,0 @@
-CONTAINER ID   IMAGE                     COMMAND                  CREATED         STATUS                   PORTS                                             NAMES
-d97f5288201c   ai-hub-openclaw-gateway   "docker-entrypoint.s…"   3 minutes ago   Up 3 minutes (healthy)   0.0.0.0:18789->18789/tcp, [::]:18789->18789/tcp   openclaw-gateway
-bdd31115b5e6   ollama/ollama:latest      "/bin/ollama serve"      3 minutes ago   Up 3 minutes (healthy)   0.0.0.0:11434->11434/tcp, [::]:11434->11434/tcp   ollama-brain

@@ -18,4 +18,16 @@ test_fetch_output_fixed.txt
 
 # System / logs
 *.log
+*.out
+mission_logs.out
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Temporary dumps
+*.txt
+!README.md
+!GUIDE.md
+!openclaw_help.txt

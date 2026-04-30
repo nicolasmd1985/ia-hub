@@ -1,6 +1,6 @@
-# AI Development Hub — OpenClaw + Ollama
+# AI Development Hub — OpenClaw + Ollama (v43)
 
-A 100% local, zero-cloud AI agent hub running on your machine.
+A 100% local, zero-cloud AI agent hub running on your machine with autonomous TDD capabilities.
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -14,56 +14,85 @@ A 100% local, zero-cloud AI agent hub running on your machine.
 └─────────────────────────────────────────────────────┘
 ```
 
+## Architecture (Multi-Model Specialization)
+
+The AI Hub utilizes specific models tailored for distinct agent roles to balance performance, memory, and reasoning precision:
+- **Backend / Frontend Developers**: `qwen2.5-coder:3b`
+- **Architect / Analyst (Routing & Planning)**: `qwen2.5:1.5b`
+- **QA Engineer**: `llama3.2:3b`
+
+These models are defined in `openclaw-docker/openclaw.json` and must be downloaded before executing the autonomous pipeline.
+
 ## Quick Start
 
 ```bash
-# 1. Preflight check (GPU, Docker, RAM)
-make check
-
-# 2. Start everything
+# 1. Start Docker Infrastructure
 make up
 
-# 3. Pull your first model (llama3.2 default)
-make model
+# 2. Pull all required multi-agent models (qwen & llama)
+make pull-models
 
-# 4. Open the Control UI
-open http://localhost:18789
+# 3. Open the Control UI (optional)
+# -> http://localhost:18789
 ```
 
-## Using a different model
+## Automated Kanban Workflow (Mission Control)
+
+The AI Hub features a fully autonomous background daemon (`mission_control.py`) that syncs with your GitHub Project board to drive tasks automatically through the pipeline (To Do → In Progress → In Review QA → Pull Request Review).
+
+### Enterprise Resilience:
+- **SQLite Persistence**: Uses a local database (`mission_state.db`) to track recovery and hallucination limits between process restarts, preventing infinite API or Git loops.
+- **Instance Locking**: Employs an OS-level file lock (`/tmp/mission_control.lock`) to ensure only one orchestrator daemon can run at a time, avoiding Git race conditions.
+- **Strict QA Enforcement**: The QA agent cannot write data or hallucinate tools; it exclusively runs your test suite (`bash run_tests.sh`) and reports real terminal output back to the backend developer for iterative fixes.
+
+### Running Mission Control
+
+You can launch the orchestrator right from the Makefile, which also ensures logs are correctly truncated and mapped.
 
 ```bash
-make model MODEL=codellama:latest
-make model MODEL=mistral:latest
-make model MODEL=deepseek-coder:latest
+# Option 1: Run in foreground (watch output live)
+make mission
+
+# Option 2: Run in background (survives SSH disconnects)
+nohup python3 -u mission_control.py > mission_logs.out 2>&1 &
 ```
 
-## Useful commands
+### Managing the Daemon
+
+**1. Watch live logs:**
+```bash
+make logs                # For Docker containers (Ollama/OpenClaw)
+tail -f mission_logs.out # For Mission Control brain
+```
+
+**2. Stop Mission Control:**
+```bash
+pkill -f mission_control.py
+```
+
+**3. Nuclear Reset (Fresh Start):**
+If the configuration breaks, or an agent hallucinates unrecoverable states inside the container, you can wipe the sessions, restore the gateway configs, and restart the daemon cleanly via:
+```bash
+bash apply_nuclear_patch.sh
+```
+
+## Useful Commands
 
 | Command               | Action                               |
 |-----------------------|--------------------------------------|
 | `make up`             | Start all containers                 |
 | `make down`           | Stop all containers                  |
-| `make logs`           | Tail logs from everything            |
+| `make logs`           | Tail logs from containers            |
 | `make status`         | Container + GPU + model status       |
-| `make model-list`     | List downloaded models               |
-| `make restart-openclaw` | Hot restart OpenClaw only          |
-| `make restart-ollama` | Hot restart Ollama only              |
+| `make pull-models`    | Pull all required agent models       |
+| `make mission`        | Start Mission Control orchestrator   |
+| `make restart-openclaw` | Hot restart OpenClaw gateway       |
+| `make purge-state`    | Forcefully clear session locks/jsonl |
 | `make clean`          | Delete everything (including models) |
-
-## Configuration
-
-Edit `openclaw-docker/openclaw.json` to:
-- Add/remove models from the Ollama provider
-- Set the default agent model
-- Customize agent system prompts
-- Add new agent profiles (e.g., `coder`, `researcher`)
-
-Edit `.env` to change the gateway auth token.
 
 ## GPU Passthrough
 
-If `make check` shows GPU passthrough is NOT working, install NVIDIA Container Toolkit:
+If `make status` shows GPU passthrough is NOT working, install the NVIDIA Container Toolkit:
 
 ```bash
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
@@ -76,55 +105,4 @@ curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-contai
 sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
-```
-
-Then run `make check` again to verify.
-
-## Architecture
-
-- **ollama-brain**: Ollama inference engine, GPU-accelerated, models cached in named volume
-- **openclaw-gateway**: OpenClaw agent gateway, built from Node 22 + npm package
-- **ai-brain-net**: Internal Docker bridge — OpenClaw reaches Ollama at `http://ollama-brain:11434`
-- Both containers restart automatically unless explicitly stopped
-
-## Automated Kanban Workflow (Mission Control)
-
-The AI Hub features a fully autonomous background daemon (`mission_control.py`) that syncs with your GitHub Project board to drive tasks automatically.
-
-### Running Mission Control in the Background
-
-Since the python script has an internal continuous loop (polling every 15s), you can use the `run_mission_control.sh` wrapper combined with `nohup` to run it indefinitely as a background service:
-
-```bash
-nohup ./run_mission_control.sh > mission_logs.out 2>&1 &
-```
-
-**What this does:**
-1. **Detaches** the process from your terminal, allowing it to survive server disconnects or window closures.
-2. Uses the bash wrapper (`run_mission_control.sh`) as a safety **watchdog** that automatically restarts the python script if it ever fatally crashes.
-3. Redirects all logs (standard outputs + errors) to the `mission_logs.out` file.
-
-### Managing the Background Process
-
-**1. Watch the live logs:**
-```bash
-tail -f mission_logs.out
-```
-*(Press `Ctrl+C` to stop watching. The script will safely continue running in the background).*
-
-**2. Check if the loop is actively running:**
-```bash
-ps aux | grep mission_control
-```
-*(Note: If the only result you see is `grep --color=auto mission_control`, it means the background daemon is OFF. That line is just the terminal capturing your search command executing at that exact millisecond).*
-
-**3. Stop the background process entirely:**
-```bash
-pkill -f mission_control.py && pkill -f run_mission_control.sh
-```
-*(You must kill both to stop the system completely. The python process runs the logic, while the bash script runs the watchdog wrapping it. Killing only one might trigger the other to auto-restart).*
-
-Para reiniciar todo el sistema
-```bash
-sh apply_nuclear_patch.sh
 ```

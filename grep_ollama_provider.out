@@ -1,9 +1,0 @@
-/usr/local/lib/node_modules/openclaw/dist/api-DCBkMwKJ.js:	const baseUrl = params.config.models?.providers?.ollama?.baseUrl ?? "http://127.0.0.1:11434";
-/usr/local/lib/node_modules/openclaw/dist/embedding-provider-BiU1p-6U.js:	const providerApiKey = normalizeOptionalSecretInput(options.config.models?.providers?.ollama?.apiKey);
-/usr/local/lib/node_modules/openclaw/dist/embedding-provider-BiU1p-6U.js:	const providerConfig = options.config.models?.providers?.ollama;
-/usr/local/lib/node_modules/openclaw/dist/extensions/ollama/index.js:			docsPath: "/providers/ollama",
-/usr/local/lib/node_modules/openclaw/dist/extensions/ollama/index.js:					const explicit = ctx.config.models?.providers?.ollama;
-/usr/local/lib/node_modules/openclaw/dist/extensions/ollama/index.js:					providerBaseUrl: config?.models?.providers?.ollama?.baseUrl
-/usr/local/lib/node_modules/openclaw/dist/extensions/ollama/index.js:					source: "models.providers.ollama (synthetic local key)",
-/usr/local/lib/node_modules/openclaw/dist/extensions/ollama/index.js:			buildUnknownModelHint: () => "Ollama requires authentication to be registered as a provider. Set OLLAMA_API_KEY=\"ollama-local\" (any value works) or run \"openclaw configure\". See: https://docs.openclaw.ai/providers/ollama"
-/usr/local/lib/node_modules/openclaw/dist/extensions/ollama/openclaw.plugin.json:  "providers": [

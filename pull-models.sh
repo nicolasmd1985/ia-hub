@@ -17,12 +17,14 @@ info() { echo -e "${BLUE}[→]${NC} $1"; }
 fail() { echo -e "${RED}[✗]${NC} $1"; }
 
 # ── Agent → Model mapping ────────────────────────────────────────────────────
+# Maps each agent role to the model it uses (must match openclaw.json)
 declare -A AGENT_MODELS=(
-  ["general"]="qwen2.5:7b"
-  ["fast"]="qwen2.5:3b"
-  ["coder"]="qwen2.5-coder:7b"
-  ["reasoner"]="deepseek-r1:7b"
-  ["analyst"]="qwen2.5:3b"
+  ["architect"]="qwen2.5:1.5b"
+  ["backend"]="qwen2.5-coder:3b"
+  ["frontend"]="qwen2.5-coder:3b"
+  ["analyst"]="qwen2.5:1.5b"
+  ["qa"]="llama3.2:3b"
+  ["product_owner"]="gemma2:2b"
 )
 
 # ── Check Ollama is running ──────────────────────────────────────────────────
@@ -52,6 +54,30 @@ for agent in "${!AGENT_MODELS[@]}"; do
 
     if docker exec ollama-brain ollama pull "$model"; then
         ok "Pulled: $model"
+        
+        # --- Generate optimized variant ---
+        if [[ "$agent" == "product_owner" ]]; then
+            # Product Owner gets a VRAM-optimized variant (uses GPU)
+            info "Creating VRAM-optimized variant for Product Owner..."
+            echo "FROM $model" > Modelfile.tmp
+            echo "PARAMETER num_ctx 2048" >> Modelfile.tmp
+            echo "PARAMETER num_gpu 1" >> Modelfile.tmp
+            echo "PARAMETER temperature 0.7" >> Modelfile.tmp
+            docker cp Modelfile.tmp ollama-brain:/tmp/Modelfile.tmp
+            docker exec ollama-brain ollama create "${model}-vram" -f /tmp/Modelfile.tmp
+            rm Modelfile.tmp
+            ok "Created VRAM variant: ${model}-vram"
+        else
+            # Technical agents get CPU-only variants (deterministic, no GPU)
+            info "Optimizing $model for CPU-only execution..."
+            echo "FROM $model" > Modelfile.tmp
+            echo "PARAMETER num_gpu 0" >> Modelfile.tmp
+            echo "PARAMETER temperature 0" >> Modelfile.tmp
+            docker cp Modelfile.tmp ollama-brain:/tmp/Modelfile.tmp
+            docker exec ollama-brain ollama create "${model}-cpu" -f /tmp/Modelfile.tmp
+            rm Modelfile.tmp
+            ok "Created CPU variant: ${model}-cpu"
+        fi
     else
         warn "Failed to pull: $model  (will retry or skip)"
         FAILED+=("$model")
