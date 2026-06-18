@@ -16,13 +16,13 @@
     "defaults": {
       "timeoutSeconds": 86450,
       "bootstrapMaxChars": 12000,
-      "model": "ollama/qwen2.5-coder:3b",
+      "model": "ollama/qwen2.5-coder:7b",
       "llm": {
         "idleTimeoutSeconds": 86450
       },
       "models": {
-        "ollama/qwen2.5-coder:3b": {
-          "alias": "Qwen 2.5 Coder 3B",
+        "ollama/qwen2.5-coder:7b": {
+          "alias": "Qwen 2.5 Coder 7B",
           "streaming": true
         },
         "ollama/qwen2.5:1.5b": {
@@ -61,7 +61,7 @@
         "id": "backend",
         "name": "Backend Developer",
         "workspace": "/root/.openclaw/workspaces/backend",
-        "model": "ollama/qwen2.5-coder:3b-cpu",
+        "model": "ollama/qwen2.5-coder:7b-cpu",
         "identity": { "name": "Backend", "emoji": "⚙️", "theme": "Ruby on Rails backend specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
       },
@@ -69,7 +69,7 @@
         "id": "frontend",
         "name": "Frontend Developer",
         "workspace": "/root/.openclaw/workspaces/frontend",
-        "model": "ollama/qwen2.5-coder:3b-cpu",
+        "model": "ollama/qwen2.5-coder:7b-cpu",
         "identity": { "name": "Frontend", "emoji": "🎨", "theme": "Hotwire and Turbo frontend specialist" },
         "tools": { "profile": "coding", "deny": ["apply_patch", "image", "image_generate"] }
       },
@@ -113,10 +113,9 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "qwen2.5-coder:3b-cpu",
-            "name": "Qwen 2.5 Coder 3B (CPU-ONLY)",
+            "id": "qwen2.5-coder:7b-cpu",
+            "name": "Qwen 2.5 Coder 7B (CPU-ONLY)",
             "reasoning": true,
-            "input": ["text"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
             "contextWindow": 24576,
             "maxTokens": 4096
@@ -125,7 +124,6 @@
             "id": "qwen2.5:1.5b-cpu",
             "name": "Qwen2.5 1.5B (CPU-ONLY)",
             "reasoning": false,
-            "input": ["text"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
             "contextWindow": 32768,
             "maxTokens": 2048
@@ -134,7 +132,6 @@
             "id": "llama3.2:3b-cpu",
             "name": "Llama 3.2 3B (CPU-ONLY)",
             "reasoning": false,
-            "input": ["text"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
             "contextWindow": 16384,
             "maxTokens": 4096
@@ -143,7 +140,6 @@
             "id": "gemma2:2b-vram",
             "name": "Gemma 2 2B (VRAM-OPTIMIZED)",
             "reasoning": false,
-            "input": ["text"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
             "contextWindow": 2048,
             "maxTokens": 1024
@@ -152,7 +148,6 @@
             "id": "gemma2:2b",
             "name": "Gemma 2 2B (Product Owner)",
             "reasoning": false,
-            "input": ["text"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
             "contextWindow": 8192,
             "maxTokens": 4096

@@ -30,14 +30,14 @@ services:
       - ollama-models:/root/.ollama
     environment:
       - OLLAMA_HOST=http://0.0.0.0:11434  # bind on all interfaces
-      - OLLAMA_KEEP_ALIVE=24h             # keep model loaded — avoids 5s reload penalty per request
+      - OLLAMA_KEEP_ALIVE=30s              # Unload model 30s after last request — prevents RAM sharing between agents
       - OLLAMA_MAX_QUEUE=100             # Allow queuing if model is busy on CPU
-      - OLLAMA_MAX_LOADED_MODELS=1        # strictly 1 model at a time to prevent extreme RAM/Swap freeze on CPU
+      - OLLAMA_MAX_LOADED_MODELS=1        # allow only 1 model at a time to prevent extreme RAM swapping
       - OLLAMA_NUM_PARALLEL=1             # 1 parallel request at a time
-      - OLLAMA_CONTEXT_LENGTH=8192      # Reduced to 8K to save RAM
+      - OLLAMA_CONTEXT_LENGTH=8192        # Reduced to 8K to prevent massive memory KV cache thrashing
       # - CUDA_VISIBLE_DEVICES=             # disable MX110 GPU — too small (2GB) for any model
       - OLLAMA_INTEL_GPU=0                # no intel GPU offloading either
-      - OLLAMA_NUM_THREADS=6              # Reduced to 6 to leave OS/Gateway breathing room
+      - OLLAMA_NUM_THREADS=4              # Reduced to 4 to leave CPU headroom and prevent OS deadlocks
       - OLLAMA_FLASH_ATTENTION=0          # disabled to prevent crash on CPU/older setups
     # Port check via bash /dev/tcp — no curl/wget needed in Ollama image
     # Check if the Ollama API is actually responding (not just the port being open)

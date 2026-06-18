@@ -58,6 +58,8 @@ def increment_state_counter(task_id, counter_type):
 
 MAX_HALLUCINATION_RETRIES = 3
 MAX_QA_HARD_CEILING = 8  # Absolute maximum QA↔Backend cycles (safety net)
+MAX_GLOBAL_TASK_ATTEMPTS = 15  # Maximum total times a task can be picked up before permanent backlog
+MAX_API_FAILURES_BEFORE_BACKOFF = 10  # Consecutive API failures before exponential backoff
 
 # ─── Convergence Tracking DB ─────────────────────────────────────────────────
 
@@ -216,6 +218,234 @@ def extract_schema_for_model(project_path, model_name):
     match = _re.search(pattern, content, _re.DOTALL)
     return match.group(1) if match else ""
 
+# ─── Pre-Flight Blueprint Builder ─────────────────────────────────────────────
+# Deterministic project analysis: reads the filesystem directly (no LLM needed)
+# to build an ultra-precise context document for the 3B Backend agent.
+
+def _camel_to_snake(name):
+    """Convert CamelCase to snake_case: Corporation → corporation."""
+    return _re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+
+def _read_file_safe(path, max_lines=80):
+    """Read a file safely, returning content or empty string. Truncates to max_lines."""
+    if not path or not os.path.exists(path):
+        return ""
+    try:
+        with open(path, 'r') as f:
+            lines = f.readlines()
+        if len(lines) > max_lines:
+            return ''.join(lines[:max_lines]) + f"\n# ... truncated ({len(lines)} lines total)\n"
+        return ''.join(lines)
+    except Exception:
+        return ""
+
+def _find_example_file(base_dir, prefix="create_", extension=".rb", exclude_pattern=None):
+    """Find an existing file matching a pattern to use as a template.
+    Returns (relative_path, content) or (None, None)."""
+    if not os.path.exists(base_dir):
+        return None, None
+    for root, dirs, files in os.walk(base_dir):
+        if exclude_pattern and exclude_pattern in os.path.basename(root):
+            continue
+        for f in sorted(files):
+            if exclude_pattern and exclude_pattern in f:
+                continue
+            if f.startswith(prefix) and f.endswith(extension):
+                full_path = os.path.join(root, f)
+                rel_path = os.path.relpath(full_path, os.path.dirname(os.path.dirname(os.path.dirname(base_dir))))
+                content = _read_file_safe(full_path)
+                if content:
+                    return rel_path, content
+    return None, None
+
+def _detect_required_files(project_path, model_name):
+    """Determine which files need to be created vs already exist for a given model."""
+    snake = _camel_to_snake(model_name)  # Corporation → corporation
+    
+    checks = [
+        (f"spec/models/{snake}_spec.rb", "Model spec"),
+        (f"spec/factories/{snake}s.rb", "Factory"),
+        (f"app/models/{snake}.rb", "Model"),
+        (f"app/graphql/mutations/{snake}s/create_{snake}.rb", "Create mutation"),
+        (f"app/graphql/inputs/{snake}_input.rb", "Input type"),
+        (f"app/graphql/types/{snake}_type.rb", "GraphQL type"),
+        (f"spec/graphql/mutations/{snake}s/create_{snake}_spec.rb", "Mutation spec"),
+    ]
+    
+    create_list = []
+    exists_list = []
+    for path, label in checks:
+        full = os.path.join(project_path, path)
+        if os.path.exists(full):
+            exists_list.append((path, label))
+        else:
+            create_list.append((path, label))
+    
+    return create_list, exists_list
+
+def _analyze_model_validations(model_source):
+    """Analyze a model file to detect existing validations and associations."""
+    validations = _re.findall(r'validates?\s+:?(\w[^,\n]+)', model_source)
+    associations = _re.findall(r'(belongs_to|has_many|has_one|has_and_belongs_to_many)\s+:(\w+)', model_source)
+    callbacks = _re.findall(r'(before_\w+|after_\w+|around_\w+)\s+:(\w+)', model_source)
+    return validations, associations, callbacks
+
+def build_project_blueprint(project_path, model_name, task_title, task_body):
+    """Build a deterministic, ultra-precise blueprint for the Backend agent.
+    
+    Reads the filesystem directly (no LLM) to gather:
+    - Schema for the target model
+    - The actual model source (to know real validations)
+    - Existing patterns (mutations, inputs) to copy
+    - What files need to be created vs what exists
+    """
+    if not model_name or not project_path:
+        return ""
+    
+    snake = _camel_to_snake(model_name)
+    blueprint = "\n## 🎯 PRE-FLIGHT BLUEPRINT (FOLLOW EXACTLY — DO NOT GUESS)\n\n"
+    
+    # ─── 1. File Inventory ──────────────────────────────────────────────────
+    create_list, exists_list = _detect_required_files(project_path, model_name)
+    
+    if create_list:
+        blueprint += "### 📝 FILES YOU MUST CREATE:\n"
+        for i, (path, label) in enumerate(create_list, 1):
+            blueprint += f"{i}. `{path}` — {label}\n"
+        blueprint += "\n"
+    
+    if exists_list:
+        blueprint += "### ✅ FILES THAT ALREADY EXIST (DO NOT recreate, edit if needed):\n"
+        for path, label in exists_list:
+            blueprint += f"- `{path}` ✓ ({label})\n"
+        blueprint += "\n"
+    
+    # ─── 2. Model Source (Ground Truth for validations) ─────────────────────
+    model_path = os.path.join(project_path, "app", "models", f"{snake}.rb")
+    model_source = _read_file_safe(model_path)
+    if model_source:
+        validations, associations, callbacks = _analyze_model_validations(model_source)
+        
+        blueprint += f"### 🔍 ACTUAL MODEL SOURCE (`app/models/{snake}.rb`):\n"
+        blueprint += f"```ruby\n{model_source.strip()}\n```\n\n"
+        
+        if not validations or all('uniqueness' in v for v in validations):
+            blueprint += (
+                f"⚠️ **WARNING:** The {model_name} model has NO presence validations.\n"
+                f"DO NOT write `validate_presence_of` tests unless you ALSO add the validation to the model.\n"
+                f"If the task only asks for TESTS (not model changes), test ONLY what the model actually validates.\n\n"
+            )
+        
+        if associations:
+            blueprint += "**Existing associations:** "
+            blueprint += ", ".join([f"`{a[0]} :{a[1]}`" for a in associations])
+            blueprint += "\n\n"
+    
+    # ─── 3. Database Schema ────────────────────────────────────────────────
+    schema_excerpt = extract_schema_for_model(project_path, model_name)
+    if schema_excerpt:
+        blueprint += (
+            f"### 📊 DATABASE SCHEMA (GROUND TRUTH — use ONLY these column names):\n"
+            f"```ruby\n{schema_excerpt}\n```\n\n"
+        )
+    
+    # ─── 4. Existing Factory ───────────────────────────────────────────────
+    factory_path = os.path.join(project_path, "spec", "factories", f"{snake}s.rb")
+    factory_source = _read_file_safe(factory_path)
+    if factory_source:
+        blueprint += (
+            f"### 🏭 EXISTING FACTORY (DO NOT duplicate — edit ONLY if needed):\n"
+            f"```ruby\n{factory_source.strip()}\n```\n\n"
+        )
+    
+    # ─── 5. Example Patterns (from sibling mutations) ──────────────────────
+    mutations_dir = os.path.join(project_path, "app", "graphql", "mutations")
+    example_path, example_content = _find_example_file(mutations_dir, "create_", exclude_pattern=snake)
+    if example_content:
+        blueprint += (
+            f"### 📐 EXAMPLE MUTATION PATTERN (copy this structure EXACTLY):\n"
+            f"**From:** `{example_path}`\n"
+            f"```ruby\n{example_content.strip()}\n```\n\n"
+        )
+    
+    # Example Mutation Spec (for auth patterns)
+    specs_dir = os.path.join(project_path, "spec", "graphql", "mutations")
+    example_spec_path, example_spec_content = _find_example_file(specs_dir, "create_", "_spec.rb", exclude_pattern=snake)
+    if example_spec_content:
+        blueprint += (
+            f"### 🧪 EXAMPLE MUTATION SPEC (Note how Authentication/Headers are handled!):\n"
+            f"**From:** `{example_spec_path}`\n"
+            f"```ruby\n{example_spec_content.strip()}\n```\n\n"
+        )
+    
+    # Example Input type
+    inputs_dir = os.path.join(project_path, "app", "graphql", "inputs")
+    input_path, input_content = _find_example_file(inputs_dir, "", "_input.rb", exclude_pattern=snake)
+    if input_content:
+        blueprint += (
+            f"### 📐 EXAMPLE INPUT TYPE (copy this structure EXACTLY):\n"
+            f"**From:** `{input_path}`\n"
+            f"```ruby\n{input_content.strip()}\n```\n\n"
+        )
+    
+    # ─── 6. Base Mutation Class ────────────────────────────────────────────
+    base_mutation_path = os.path.join(mutations_dir, "base_mutation.rb")
+    base_source = _read_file_safe(base_mutation_path)
+    if base_source and "RelayClassicMutation" in base_source:
+        blueprint += (
+            "### ⚙️ BASE MUTATION (your mutation MUST extend this):\n"
+            f"```ruby\n{base_source.strip()}\n```\n\n"
+        )
+    
+    # ─── 7. Mutation Registration ──────────────────────────────────────────
+    mutation_type_path = os.path.join(project_path, "app", "graphql", "types", "mutation_type.rb")
+    mutation_type_source = _read_file_safe(mutation_type_path)
+    if mutation_type_source:
+        # Check if the mutation is already registered
+        create_field = f"create_{snake}"
+        if create_field not in mutation_type_source:
+            blueprint += (
+                f"### 📋 REGISTRATION REQUIRED:\n"
+                f"Add this line to `app/graphql/types/mutation_type.rb`:\n"
+                f"```ruby\nfield :create_{snake}, mutation: Mutations::{model_name}s::Create{model_name}\n```\n\n"
+            )
+        else:
+            blueprint += f"✅ Mutation `create_{snake}` is already registered in `mutation_type.rb`.\n\n"
+    
+    # ─── 8. GraphQL Type ──────────────────────────────────────────────────
+    type_path = os.path.join(project_path, "app", "graphql", "types", f"{snake}_type.rb")
+    type_source = _read_file_safe(type_path)
+    if type_source:
+        blueprint += (
+            f"### 📐 EXISTING GRAPHQL TYPE (`types/{snake}_type.rb`):\n"
+            f"```ruby\n{type_source.strip()}\n```\n\n"
+        )
+    
+    # ─── 9. Related Models (Context Injection) ──────────────────────────────
+    potential_models = set(_re.findall(r'[A-Z][a-zA-Z]+', (task_title or "") + " " + (task_body or "")))
+    potential_models.discard(model_name)
+    potential_models.discard("RSpec")
+    potential_models.discard("GraphQL")
+    potential_models.discard("Backend")
+    potential_models.discard("Implement")
+    
+    related_content = ""
+    for other_model in sorted(potential_models):
+        other_snake = _camel_to_snake(other_model)
+        other_schema = extract_schema_for_model(project_path, other_model)
+        if other_schema:
+            related_content += f"#### {other_model} Schema:\n```ruby\n{other_schema}\n```\n"
+            # Also read top of model file to see important methods/associations
+            other_model_path = os.path.join(project_path, "app", "models", f"{other_snake}.rb")
+            other_source = _read_file_safe(other_model_path, max_lines=40)
+            if other_source:
+                related_content += f"#### {other_model} Source (Partial):\n```ruby\n{other_source.strip()}\n```\n\n"
+    
+    if related_content:
+        blueprint += "### 🔗 RELATED MODELS (REFERENCE ONLY):\n" + related_content
+
+    return blueprint
+
 def build_targeted_feedback(qa_output, rspec_result):
     """Build structured, actionable feedback for the Backend agent from QA failures."""
     feedback = "\n\n## ❌ QA TEST RESULTS — YOUR CODE HAS BUGS\n"
@@ -282,6 +512,85 @@ def load_project_config(project_path):
         except Exception as e:
             print(f"⚠️ Error loading project config: {e}")
     return {}
+
+# ─── RAM Isolation: Explicit Model Unloading ─────────────────────────────
+# Maps agent IDs to their Ollama model names for explicit unloading.
+AGENT_MODEL_MAP = {
+    "backend": "qwen2.5-coder:7b-cpu",
+    "frontend": "qwen2.5-coder:7b-cpu",
+    "qa": "llama3.2:3b-cpu",
+    "architect": "qwen2.5:1.5b-cpu",
+    "analyst": "qwen2.5:1.5b-cpu",
+    "product_owner": "gemma2:2b-vram",
+}
+
+def _get_agent_model(agent_id):
+    """Dynamically get the model name for a given agent from openclaw-docker/openclaw.json."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, "openclaw-docker", "openclaw.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                data = json.load(f)
+                for agent in data.get("agents", {}).get("list", []):
+                    if agent.get("id") == agent_id:
+                        model_str = agent.get("model", "")
+                        if model_str.startswith("ollama/"):
+                            return model_str.replace("ollama/", "")
+                        return model_str
+        except Exception as e:
+            print(f"⚠️ Error reading model dynamically from openclaw.json: {e}")
+    # Fallback to hardcoded map
+    return AGENT_MODEL_MAP.get(agent_id, "")
+
+def flush_ollama_model(agent_id=None):
+    """Force Ollama to unload the specified agent's model from RAM.
+    
+    This ensures 100% RAM dedication when switching between agents.
+    For example, after Backend (7B, ~5GB) finishes, we unload it
+    completely before QA (3B, ~2GB) starts, preventing swap death.
+    
+    Uses two mechanisms:
+    1. `ollama stop <model>` — direct unload command (Ollama 0.5+)
+    2. Fallback: POST /api/generate with keep_alive=0 — forces immediate eviction
+    """
+    models_to_unload = []
+    if agent_id:
+        model = _get_agent_model(agent_id)
+        if model:
+            models_to_unload = [model]
+    else:
+        # Unload ALL models in map
+        models_to_unload = list(set(_get_agent_model(aid) for aid in AGENT_MODEL_MAP.keys() if _get_agent_model(aid)))
+    
+    for model_name in models_to_unload:
+        try:
+            # Method 1: Direct stop (Ollama 0.5+)
+            result = subprocess.run(
+                ["docker", "exec", "ollama-brain", "ollama", "stop", model_name],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                print(f"🧊 [RAM] Unloaded model '{model_name}' from RAM")
+                continue
+        except (subprocess.TimeoutExpired, Exception):
+            pass
+        
+        try:
+            # Method 2: Fallback — keep_alive=0 trick
+            unload_payload = json.dumps({"model": model_name, "keep_alive": 0})
+            subprocess.run(
+                ["docker", "exec", "ollama-brain", "sh", "-c",
+                 f"curl -s -X POST http://localhost:11434/api/generate -d '{unload_payload}'"],
+                capture_output=True, text=True, timeout=30
+            )
+            print(f"🧊 [RAM] Sent keep_alive=0 eviction for '{model_name}'")
+        except (subprocess.TimeoutExpired, Exception) as e:
+            print(f"⚠️  [RAM] Could not unload '{model_name}': {e}")
+    
+    # Give the OS a moment to reclaim memory pages
+    time.sleep(5)
+    print("🧊 [RAM] Memory cooldown complete. Ready for next agent.")
 
 def rescue_hallucinated_writes(response_text, container_ws):
     """Safety net: Parse write tool calls or markdown blocks from agent TEXT response.
@@ -361,18 +670,26 @@ def query_graphql(query, variables, token):
         "-H", "Content-Type: application/json"
     ]
     data = json.dumps({"query": query, "variables": variables})
-    cmd = ["curl", "--connect-timeout", "10", "--max-time", "60", "-s", "-X", "POST"] + headers + ["-d", data, url]
+    cmd = ["curl", "--connect-timeout", "10", "--max-time", "60", "-X", "POST"] + headers + ["-d", data, url]
     
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
-            return json.loads(result.stdout)
-        else:
-            print(f"Curl error: {result.stderr}")
-            return None
-    except Exception as e:
-        print(f"Exception during curl query: {e}")
-        return None
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                return json.loads(result.stdout)
+            else:
+                print(f"Curl error (attempt {attempt+1}/{max_retries}): ExitCode={result.returncode}, Stderr={result.stderr.strip()}")
+                if attempt < max_retries - 1:
+                    time.sleep(5)
+                else:
+                    return None
+        except Exception as e:
+            print(f"Exception during curl query (attempt {attempt+1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(5)
+            else:
+                return None
 
 # ─── Telegram Notifier ────────────────────────────────────────────────────────
 def send_telegram(message):
@@ -542,7 +859,7 @@ def fetch_todo_items(env):
     res = query_graphql(GET_PROJECT_ITEMS, {"owner": owner, "number": number}, token)
     if not res or "data" not in res:
         print("Failed to fetch project data.")
-        return []
+        raise ConnectionError("GitHub API fetch failed. Network down or bad token.")
 
     project = res["data"]["user"]["projectV2"]
     if not project:
@@ -584,7 +901,8 @@ def ensure_dev_container(project_path):
     Creates a docker-compose.override.yml to add '- .:/app' without modifying the production
     docker-compose.yml."""
     config = load_project_config(project_path)
-    ruby_container = config.get("container_name", "ordenapp_web_container")
+    project_name = os.environ.get("PROJECT_NAME", os.path.basename(project_path))
+    ruby_container = config.get("container_name", f"{project_name}_container")
     override_path = os.path.join(project_path, "docker-compose.override.yml")
     
     # Create override file for dev volume mount (if not already present)
@@ -597,7 +915,13 @@ def ensure_dev_container(project_path):
     print("🔄 Restarting container in development mode with volume mount...")
     dev_env = os.environ.copy()
     dev_env["ENV"] = "development"
-    subprocess.run(["docker", "compose", "up", "-d", "--no-deps", "web"], cwd=project_path, env=dev_env, capture_output=True)
+    res = subprocess.run(["docker", "compose", "up", "-d", "--no-deps", "web"], cwd=project_path, env=dev_env, capture_output=True, text=True)
+    if res.returncode != 0:
+        print(f"⚠️  Docker compose up failed: {res.stderr.strip()}")
+    
+    # Fallback: force start if it is still exited
+    subprocess.run(["docker", "start", ruby_container], capture_output=True)
+    
     time.sleep(10)
     print(f"✅ {ruby_container} ready in development mode.")
 
@@ -910,7 +1234,7 @@ def poll_and_process(env):
                 safe_clear_locks("architect")
                 prompt_architect = f"Task Title: {item['title']}\nDescription: {item['body']}\n\nYou must analyze the task to decide the required developer role.\nReply STRICTLY with exactly ONE WORD: 'BACKEND', 'FRONTEND', or 'ERROR'.\nIf the task is unclear, missing details, or cannot be routed, reply 'ERROR'."
                 
-                res = trigger_agent("architect", prompt_architect, timeout=3600)
+                res = trigger_agent("architect", prompt_architect, timeout=7200)
                 if not res:
                     handle_retry(item, env, "ARCHITECT FAILURE: Agent timed out or failed to execute gracefully.", cur_branch)
                     continue
@@ -927,41 +1251,46 @@ def poll_and_process(env):
             # 2. Dispatch Work to Dev Agent
             print(f"Claiming task with {assigned_agent.upper()} agent...")
             
-            # ── Schema Injection: Feed the 3B model the schema directly ──
-            # Small models skip reading files. We inject the ground truth inline.
+            # ── Pre-Flight Blueprint: Deterministic project analysis ──
+            # Reads the filesystem directly (no LLM) to build ultra-precise context.
             model_match = _re.search(r'for\s+(\w+)', item['title'])
             model_name = model_match.group(1) if model_match else ""
-            schema_excerpt = extract_schema_for_model(project_path, model_name) if model_name else ""
             
-            # Also check for existing factory to prevent duplicates
-            existing_factory = ""
-            if model_name:
-                factory_path = os.path.join(project_path, "spec", "factories", f"{model_name.lower()}s.rb")
-                if os.path.exists(factory_path):
-                    with open(factory_path, 'r') as f:
-                        existing_factory = f.read()
-            
-            work_prompt = (
-                f"## Task\n"
-                f"**Title:** {item['title']}\n"
-                f"**Description:**\n{item['body']}\n\n"
-            )
-            
-            if schema_excerpt:
-                work_prompt += (
-                    f"## Database Schema (GROUND TRUTH — use ONLY these column names)\n"
-                    f"```ruby\n{schema_excerpt}\n```\n\n"
-                )
-            
-            if existing_factory:
-                work_prompt += (
-                    f"## Existing Factory (DO NOT duplicate — edit if needed)\n"
-                    f"```ruby\n{existing_factory}\n```\n\n"
-                )
+            # Build deterministic blueprint with all project context
+            blueprint = ""
+            if model_name and project_path:
+                print(f"🔍 [PRE-FLIGHT] Building blueprint for model: {model_name}...")
+                blueprint = build_project_blueprint(project_path, model_name, item['title'], item.get('body', ''))
+                if blueprint:
+                    print(f"✅ [PRE-FLIGHT] Blueprint ready ({len(blueprint)} chars)")
+                else:
+                    print(f"⚠️  [PRE-FLIGHT] Could not build blueprint for {model_name}")
             
             task_id = item.get('id', 'unknown')
             saved_feedback = get_feedback(task_id)
             hallucination_count = get_state_counter(task_id, 'hallucination')
+            
+            # ── Global retry guard: prevent infinite task recycling ──
+            global_attempts = increment_state_counter(task_id, 'global_attempt')
+            if global_attempts > MAX_GLOBAL_TASK_ATTEMPTS:
+                reason = (
+                    f"GLOBAL RETRY LIMIT ({global_attempts}/{MAX_GLOBAL_TASK_ATTEMPTS}): "
+                    f"Task has been attempted too many times across all cycles. "
+                    f"Escalating to Backlog permanently for human review."
+                )
+                print(f"🛑 {reason}")
+                handle_failure(item, env, reason)
+                continue
+            
+            work_prompt = (
+                f"## Task\n"
+                f"**Title:** {item['title']}\n"
+                f"**Description:**\n{item.get('body', '')}\n\n"
+            )
+            
+            # Inject the pre-flight blueprint (replaces old schema+factory injection)
+            if blueprint:
+                work_prompt += blueprint
             
             if saved_feedback:
                 work_prompt += saved_feedback
@@ -977,19 +1306,29 @@ def poll_and_process(env):
             work_prompt += (
                 "## Instructions\n"
                 "Your full protocol is in `SYSTEM.md`.\n"
-                "CRITICAL: Use ONLY the column names shown in the Database Schema above. Do NOT invent attributes.\n\n"
+                "CRITICAL: Follow the PRE-FLIGHT BLUEPRINT above EXACTLY. Create ALL files listed under 'FILES YOU MUST CREATE'.\n"
+                "CRITICAL: Use ONLY the column names shown in the Database Schema. Do NOT invent attributes.\n"
+                "CRITICAL: Test ONLY validations that ACTUALLY EXIST in the model source shown above.\n\n"
                 "IMPORTANT: To write or modify files, you MUST use the following EXACT Markdown format in your text response:\n\n"
                 "File: path/to/your/file.rb\n"
                 "```ruby\n"
                 "# your full code here\n"
                 "```\n\n"
-                "You must output the full file content inside the block. When done, write a short summary.\n"
+                "Output EVERY file listed in the blueprint. When done, write a short summary.\n"
             )
 
             
             # --- Sync Host Source Code into Container Workspace ---
             container_ws = f"/root/.openclaw/workspaces/{assigned_agent}"
             print(f"Syncing code files into container workspace {container_ws}...")
+            
+            # ── PROTECT AGENT IDENTITY: Backup .openclaw/ before overwriting ──
+            # The project's .openclaw/ may be empty/different. We must preserve
+            # the agent's original SYSTEM.md, IDENTITY.md, etc.
+            agent_identity_backup = f"/tmp/openclaw_identity_{assigned_agent}"
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c",
+                            f"rm -rf {agent_identity_backup} && cp -a {container_ws}/.openclaw {agent_identity_backup}"],
+                           capture_output=True)
             
             subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"rm -rf {container_ws}/*"], capture_output=True)
             subprocess.run(["docker", "cp", f"{project_path}/.", f"openclaw-gateway:{container_ws}/"], capture_output=True)
@@ -999,14 +1338,19 @@ def poll_and_process(env):
                             f"rm -rf {container_ws}/.git {container_ws}/node_modules {container_ws}/tmp {container_ws}/log {container_ws}/vendor {container_ws}/public"], 
                            capture_output=True)
 
-            # Expose agent context context to gateway root (OpenClaw requires SYSTEM.md at workspace root)
+            # ── RESTORE AGENT IDENTITY: Overwrite project's .openclaw with the original ──
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c",
+                            f"rm -rf {container_ws}/.openclaw && cp -a {agent_identity_backup} {container_ws}/.openclaw"],
+                           capture_output=True)
+
+            # Expose agent context to gateway root (OpenClaw requires SYSTEM.md at workspace root)
             subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"cp {container_ws}/.openclaw/*.md {container_ws}/.openclaw/*.json {container_ws}/ 2>/dev/null || true"], capture_output=True)
 
             # Clear any stale session locks for this agent BEFORE triggering
             print(f"Clearing stale session locks for [{assigned_agent}]...")
             safe_clear_locks(assigned_agent)
 
-            work_res = trigger_agent(assigned_agent, work_prompt, timeout=3600)
+            work_res = trigger_agent(assigned_agent, work_prompt, timeout=14400)
             if not work_res:
                 handle_retry(item, env, f"{assigned_agent.upper()} DEV FAILURE: Agent returned None (process error).", cur_branch)
                 continue
@@ -1071,13 +1415,47 @@ def poll_and_process(env):
                 continue
                 
             # --- Sync Container Updates back to Host ---
+            container_ws = f"/root/.openclaw/workspaces/{assigned_agent}"
+            
+            # ALWAYS attempt to rescue markdown blocks before syncing!
+            rescued = rescue_hallucinated_writes(work_response_text, container_ws)
+            if rescued > 0:
+                print(f"🔧 [RESCUE] Recovered {rescued} file(s) from text response.")
+
+            # --- SKEPTIC MANAGER: Deliverable Validation ---
+            # Check if all files listed in the blueprint were actually created
+            if blueprint:
+                must_create = []
+                in_blueprint = False
+                for bline in blueprint.split('\n'):
+                    if 'FILES YOU MUST CREATE' in bline.upper():
+                        in_blueprint = True
+                        continue
+                    if in_blueprint and bline.strip().startswith('-'):
+                        must_create.append(bline.strip('- ').strip())
+                    elif in_blueprint and not bline.strip():
+                        in_blueprint = False
+                
+                if must_create:
+                    missing_files = []
+                    for f_to_check in must_create:
+                        check_res = subprocess.run(["docker", "exec", "openclaw-gateway", "ls", f"{container_ws}/{f_to_check}"], capture_output=True)
+                        if check_res.returncode != 0:
+                            missing_files.append(f_to_check)
+                    
+                    if missing_files:
+                        reason = f"DELIVERABLE VALIDATION FAILED: The agent skipped these required files: {', '.join(missing_files)}. Forcing retry."
+                        print(f"🛑 {reason}")
+                        handle_retry(item, env, reason, cur_branch)
+                        continue
+
             print("Syncing modifications back from container to host...")
             container_ws = f"/root/.openclaw/workspaces/{assigned_agent}"
             
             # Preserve agent edits to SYSTEM.md etc by moving them back into .openclaw/ before sync
             subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"mv {container_ws}/SYSTEM.md {container_ws}/SOUL.md {container_ws}/IDENTITY.md {container_ws}/TOOLS.md {container_ws}/AGENTS.md {container_ws}/.openclaw/ 2>/dev/null || true"], capture_output=True)
             # Destroy transient files so they don't leak to host root
-            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"rm -f {container_ws}/.containers.txt {container_ws}/.git_log.txt {container_ws}/mutation_output_fixed.txt {container_ws}/*.out {container_ws}/docker-compose.override.yml"], capture_output=True)
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"rm -rf {container_ws}/.openclaw {container_ws}/*.md {container_ws}/*.json {container_ws}/.containers.txt {container_ws}/.git_log.txt {container_ws}/mutation_output_fixed.txt {container_ws}/*.out {container_ws}/docker-compose.override.yml {container_ws}/AGENT_REPORT.md"], capture_output=True)
 
             subprocess.run(["docker", "cp", f"openclaw-gateway:{container_ws}/.", f"{project_path}/"], capture_output=True)
 
@@ -1117,12 +1495,20 @@ def poll_and_process(env):
             for meta in META_FILES_TO_IGNORE:
                 subprocess.run(["git", "-C", project_path, "rm", "--cached", "-r", meta], capture_output=True)
 
-            # Only commit if changes were actually made in whitelist dirs
+            # Only commit if changes were actually made in whitelist dirs (staged)
             git_status = subprocess.run(["git", "-C", project_path, "status", "--porcelain"], capture_output=True, text=True)
-            has_changes = bool(git_status.stdout.strip())
+            # Filter for staged changes: first column has a letter (M, A, D, R, C), not space or '?'
+            staged_lines = [l for l in git_status.stdout.strip().split("\n") if l and not l.startswith(' ') and not l.startswith('?')]
+            has_changes = len(staged_lines) > 0
             
             if has_changes:
-                subprocess.run(["git", "-C", project_path, "commit", "-m", f"[{assigned_agent.upper()}] Implemented changes for: {item['title']}"], capture_output=True)
+                res_commit = subprocess.run(["git", "-C", project_path, "commit", "-m", f"[{assigned_agent.upper()}] Implemented changes for: {item['title']}"], capture_output=True, text=True)
+                if res_commit.returncode != 0:
+                    err_msg = res_commit.stderr.strip() or res_commit.stdout.strip()
+                    reason = f"GIT COMMIT FAILED: {err_msg}. Check permissions in {project_path}."
+                    print(f"🛑 {reason}")
+                    handle_failure(item, env, reason)
+                    continue
             
             # Determine if we should bypass QA Agent step (Audit Report mode)
             # Audit mode = ONLY the AGENT_REPORT.md or agent-report/ directory changed.
@@ -1199,41 +1585,6 @@ def poll_and_process(env):
                 task_implies_code = any(kw in task_body_lower for kw in CODE_TASK_KEYWORDS)
 
                 if task_implies_code:
-                    # ── RESCUE ATTEMPT: Parse write calls from text and execute ──
-                    rescued = rescue_hallucinated_writes(work_response_text, container_ws)
-                    if rescued > 0:
-                        print(f"🔧 [RESCUE] Recovered {rescued} file(s) from text response. Re-syncing...")
-                        subprocess.run(["docker", "cp", f"openclaw-gateway:{container_ws}/.", f"{project_path}/"], capture_output=True)
-                        
-                        # Apply same selective add and meta-ignore policy
-                        GIT_WHITELIST = ["spec/", "app/", "db/", "config/", "lib/", "test/", "agent-report/"]
-                        for dir_pattern in GIT_WHITELIST:
-                            subprocess.run(["git", "-C", project_path, "add", dir_pattern], capture_output=True)
-                        
-                        META_FILES_TO_IGNORE = ["SYSTEM.md", "docker-compose.override.yml", "AGENT_REPORT.md", ".containers.txt", ".git_log.txt", ".openclaw/"]
-                        for meta in META_FILES_TO_IGNORE:
-                            subprocess.run(["git", "-C", project_path, "rm", "--cached", "-r", meta], capture_output=True)
-
-                        git_status = subprocess.run(["git", "-C", project_path, "status", "--porcelain"], capture_output=True, text=True)
-                        
-                        # Re-evaluate: did the rescue produce actual code files?
-                        rescue_has_code = False
-                        for rline in git_status.stdout.strip().split("\n"):
-                            rstripped = rline.strip()
-                            if len(rstripped) > 3:
-                                rfp = rstripped[3:]
-                                if any(rfp.startswith(d) for d in REAL_CODE_DIRS):
-                                    rescue_has_code = True
-                                    break
-                        
-                        if rescue_has_code:
-                            is_audit_mode = False
-                            print("✅ [RESCUE] Files successfully written! Proceeding to QA.")
-                            # Fall through to QA workflow below (don't continue)
-                        else:
-                            print("⚠️  [RESCUE] Files were written but no real code detected.")
-                    
-                    # If rescue didn't fix it, apply hallucination guard with retry limit
                     if is_audit_mode:
                         task_id = item.get('id', 'unknown')
                         attempt = increment_state_counter(task_id, 'hallucination')
@@ -1278,7 +1629,8 @@ def poll_and_process(env):
             
             # --- 1. ENSURE DEV CONTAINER: Verify container is running with volume mount ---
             config = load_project_config(project_path)
-            ruby_container = config.get("container_name", "ordenapp_web_container")
+            project_name = env.get("PROJECT_NAME", os.path.basename(project_path))
+            ruby_container = config.get("container_name", f"{project_name}_container")
             print(f"🧐 [QA] Verifying execution inside {ruby_container}...")
             ensure_dev_container(project_path)
 
@@ -1311,12 +1663,6 @@ def poll_and_process(env):
             
             print(f"🧪 QA will test ONLY: {rspec_target}")
             qa_workspace = "/root/.openclaw/workspaces/qa"
-            
-            # Create a focused test wrapper that only runs the relevant specs
-            subprocess.run([
-                "docker", "exec", "openclaw-gateway", "bash", "-c",
-                f"echo '#!/bin/bash\ndocker exec {ruby_container} bash -l -c \"bundle exec rspec {rspec_target}\"' > {qa_workspace}/run_tests.sh && chmod +x {qa_workspace}/run_tests.sh"
-            ])
 
             qa_prompt = (
                 f"You are a QA test runner. Your ONLY job is to execute tests and report what happened.\n\n"
@@ -1338,11 +1684,43 @@ def poll_and_process(env):
             print("🛡️  Triggering autonomous QA Agent...")
             send_telegram(f"✅ {assigned_agent.upper()} implemented turn for '{item['title']}'. QA reviewing now.")
             move_task_column(item['id'], item['title'], "In Review QA", env)
-            # Sync code to QA workspace
+            
+            # ── RAM ISOLATION: Flush Backend model before loading QA model ──
+            # The 7B backend model uses ~5GB RAM. We MUST unload it completely
+            # before the 3B QA model starts, otherwise both share RAM = swap death.
+            print(f"🧊 [RAM ISOLATION] Flushing {assigned_agent} model before QA...")
+            flush_ollama_model(assigned_agent)
+            
+            # ── Sync code to QA workspace (PROTECTED) ──
+            # Backup QA agent identity before overwriting with project files
+            qa_identity_backup = "/tmp/openclaw_identity_qa"
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c",
+                            f"rm -rf {qa_identity_backup} && cp -a {qa_workspace}/.openclaw {qa_identity_backup}"],
+                           capture_output=True)
+            
             subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c", f"rm -rf {qa_workspace}/*"], capture_output=True)
             subprocess.run(["docker", "cp", f"{project_path}/.", f"openclaw-gateway:{qa_workspace}/"], capture_output=True)
             
-            qa_res = trigger_agent("qa", qa_prompt, timeout=3600)
+            # Restore QA identity (SYSTEM.md etc.) — project's .openclaw was empty/wrong
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c",
+                            f"rm -rf {qa_workspace}/.openclaw && cp -a {qa_identity_backup} {qa_workspace}/.openclaw"],
+                           capture_output=True)
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c",
+                            f"cp {qa_workspace}/.openclaw/*.md {qa_workspace}/.openclaw/*.json {qa_workspace}/ 2>/dev/null || true"],
+                           capture_output=True)
+            
+            # Create run_tests.sh AFTER sync (was being deleted by the sync before)
+            subprocess.run([
+                "docker", "exec", "openclaw-gateway", "bash", "-c",
+                f"echo '#!/bin/bash\ntimeout 120 docker exec {ruby_container} bash -l -c \"bundle exec rspec {rspec_target}\"' > {qa_workspace}/run_tests.sh && chmod +x {qa_workspace}/run_tests.sh"
+            ])
+            
+            # Remove heavy project files QA doesn't need (reduce indexer load)
+            subprocess.run(["docker", "exec", "openclaw-gateway", "sh", "-c",
+                            f"rm -rf {qa_workspace}/.git {qa_workspace}/node_modules {qa_workspace}/tmp {qa_workspace}/log {qa_workspace}/vendor {qa_workspace}/public"],
+                           capture_output=True)
+            
+            qa_res = trigger_agent("qa", qa_prompt, timeout=14400)
             if not qa_res:
 
                 handle_retry(item, env, "QA FAILURE: Agent returned None.", cur_branch)
@@ -1371,9 +1749,8 @@ def poll_and_process(env):
             
             # Guard 3: Hollow response detection — verify RSpec evidence exists
             rspec_result = parse_rspec_result(qa_response_text)
-            
-            if not rspec_result['has_evidence']:
-                # QA agent didn't produce real RSpec output — possible hallucination
+            if not rspec_result['has_evidence'] or rspec_result['examples'] == 0:
+                # QA agent didn't produce real RSpec output or ran 0 examples — possible hallucination/failure
                 task_id = item.get('id', 'unknown')
                 hollow_count = increment_state_counter(task_id, 'qa_hollow')
                 
@@ -1412,6 +1789,17 @@ def poll_and_process(env):
                     print(f"⚠️ [QA HOLLOW] Response lacks RSpec evidence (attempt {hollow_count}/2). Retrying QA...")
                     move_task_column(item['id'], item['title'], "In Review QA", env)
                     continue
+
+            # --- SKEPTIC MANAGER: QA Consistency Validation ---
+            # Cross-reference reported tests vs expected tests
+            expected_count = len(changed_specs) if changed_specs else 1
+            if rspec_result['examples'] < expected_count and rspec_result['examples'] > 0:
+                reason = f"QA CONSISTENCY FAILED: Agent reported {rspec_result['examples']} examples, but we expected at least {expected_count} based on the changed files. Possible hallucination. Forcing Direct QA fallback."
+                print(f"⚠️ {reason}")
+                # Treat as hollow to trigger direct fallback in next loop or force it now
+                increment_state_counter(item.get('id', 'unknown'), 'qa_hollow')
+                move_task_column(item['id'], item['title'], "In Review QA", env)
+                continue
             
             # ── We now have verified RSpec evidence ──────────────────────────
             print(f"📊 [RSPEC] {rspec_result['raw_summary']} | errors: {rspec_result['errors']}")
@@ -1476,7 +1864,12 @@ def poll_and_process(env):
             move_task_column(item['id'], item['title'], "Pull request Review", env)
             print(f"Pushing isolate branch {cur_branch} to GitHub...")
             # Use --force in case the agent rewrites and PR existed previously, but handle safely
-            subprocess.run(["git", "-C", project_path, "push", "-f", "origin", cur_branch], capture_output=True)
+            res_push = subprocess.run(["git", "-C", project_path, "push", "-f", "origin", cur_branch], capture_output=True, text=True)
+            if res_push.returncode != 0:
+                reason = f"GIT PUSH FAILED: {res_push.stderr}. Branch was committed locally but could not reach GitHub."
+                print(f"🛑 {reason}")
+                handle_failure(item, env, reason)
+                continue
             
             create_pull_request(item.get("number"), env, cur_branch)
             send_telegram(f"🎉 SUCCESS: QA Passed for issue #{item.get('number')}. PR ready for manual review at 'Pull Request Review'.")
@@ -1503,11 +1896,28 @@ def orchestrate():
     print("🔁 Entering continuous Kanban polling loop...")
     print("==============================================")
     
+    consecutive_api_failures = 0
+    
     while True:
         try:
             poll_and_process(env)
+            consecutive_api_failures = 0  # Reset on success
         except Exception as e:
             print(f"Critical error in polling loop: {e}")
+            consecutive_api_failures += 1
+            
+            # Exponential backoff when API is consistently failing
+            if consecutive_api_failures >= MAX_API_FAILURES_BEFORE_BACKOFF:
+                backoff = min(300, 15 * (2 ** (consecutive_api_failures - MAX_API_FAILURES_BEFORE_BACKOFF)))
+                print(f"🛑 [BACKOFF] {consecutive_api_failures} consecutive API failures. Waiting {backoff}s before retry...")
+                print(f"   💡 Check: Is GITHUB_TOKEN valid? Is the internet connection up?")
+                if consecutive_api_failures == MAX_API_FAILURES_BEFORE_BACKOFF or consecutive_api_failures % 100 == 0:
+                    send_telegram(f"🚨 Mission Control Alert: {consecutive_api_failures} consecutive GitHub API failures. Please check if your GITHUB_TOKEN has expired or if the internet connection is down.")
+                time.sleep(backoff)
+                # Reload env in case token was updated while waiting
+                env = load_env()
+                continue
+        
         time.sleep(15)  # Constantly poll every 15 seconds safely
 
 LOCK_FILE = "/tmp/mission_control.lock"

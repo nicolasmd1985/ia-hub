@@ -20,8 +20,8 @@ fail() { echo -e "${RED}[✗]${NC} $1"; }
 # Maps each agent role to the model it uses (must match openclaw.json)
 declare -A AGENT_MODELS=(
   ["architect"]="qwen2.5:1.5b"
-  ["backend"]="qwen2.5-coder:3b"
-  ["frontend"]="qwen2.5-coder:3b"
+  ["backend"]="qwen2.5-coder:7b"
+  ["frontend"]="qwen2.5-coder:7b"
   ["analyst"]="qwen2.5:1.5b"
   ["qa"]="llama3.2:3b"
   ["product_owner"]="gemma2:2b"
@@ -61,7 +61,7 @@ for agent in "${!AGENT_MODELS[@]}"; do
             info "Creating VRAM-optimized variant for Product Owner..."
             echo "FROM $model" > Modelfile.tmp
             echo "PARAMETER num_ctx 2048" >> Modelfile.tmp
-            echo "PARAMETER num_gpu 1" >> Modelfile.tmp
+            echo "PARAMETER num_gpu 99" >> Modelfile.tmp
             echo "PARAMETER temperature 0.7" >> Modelfile.tmp
             docker cp Modelfile.tmp ollama-brain:/tmp/Modelfile.tmp
             docker exec ollama-brain ollama create "${model}-vram" -f /tmp/Modelfile.tmp
